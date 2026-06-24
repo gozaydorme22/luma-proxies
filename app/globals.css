@@ -1,0 +1,104 @@
+@import "tailwindcss";
+
+:root {
+  /* Luma design tokens */
+  --ac: #a855f7;
+  --ac2: color-mix(in srgb, #a855f7 45%, #ffffff);
+  --acd: color-mix(in srgb, #a855f7 65%, #000000);
+  --bg: #08070c;
+  --bg-panel: rgba(13, 11, 18, 0.6);
+  --text: #f4f2f8;
+  --text-muted: rgba(244, 242, 248, 0.55);
+  --text-faint: rgba(244, 242, 248, 0.4);
+  --border: rgba(255, 255, 255, 0.07);
+  --border-hi: color-mix(in srgb, #a855f7 25%, transparent);
+  --card: rgba(255, 255, 255, 0.025);
+  --green: #34d399;
+  --yellow: #fbbf24;
+  --red: #f87171;
+}
+
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Manrope', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--ac) 45%, transparent);
+  color: #fff;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+/* Keyframes */
+@keyframes lumaMarquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+@keyframes lumaSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes lumaSpinR {
+  from { transform: rotate(360deg); }
+  to   { transform: rotate(0deg); }
+}
+@keyframes lumaBlink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.25; }
+}
+@keyframes lumaGlow {
+  0%, 100% { opacity: 0.4; }
+  50%       { opacity: 0.85; }
+}
+@keyframes lumaDash {
+  to { stroke-dashoffset: -260; }
+}
+@keyframes lumaRise {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes lumaDraw {
+  from { stroke-dashoffset: 1400; }
+  to   { stroke-dashoffset: 0; }
+}
+@keyframes lumaFloat {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-14px); }
+}
+
+/* Utility classes */
+.luma-spin   { animation: lumaSpin 24s linear infinite; }
+.luma-spinR  { animation: lumaSpinR 18s linear infinite; }
+.luma-blink  { animation: lumaBlink 1.6s infinite; }
+.luma-glow   { animation: lumaGlow 4s ease-in-out infinite; }
+.luma-dash   { animation: lumaDash 6s linear infinite; }
+.luma-rise   { animation: lumaRise 0.7s ease both; }
+.luma-draw   { stroke-dasharray: 1400; animation: lumaDraw 1.4s ease both; }
+.luma-marquee { animation: lumaMarquee 34s linear infinite; }
