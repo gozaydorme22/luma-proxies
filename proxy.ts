@@ -33,8 +33,8 @@ async function proxy(req: NextRequest) {
     const role          = payload['role'] as string | undefined
     const emailVerified = payload['email_verified'] as boolean | undefined
 
-    // Bloqueia acesso ao dashboard se e-mail não verificado
-    if (!emailVerified && pathname.startsWith('/dashboard')) {
+    // Bloqueia acesso ao dashboard/checkout se e-mail não verificado
+    if (!emailVerified && (pathname.startsWith('/dashboard') || pathname.startsWith('/checkout'))) {
       return NextResponse.redirect(new URL('/verificar', req.url))
     }
 

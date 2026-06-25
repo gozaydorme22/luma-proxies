@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/lib/hooks/useAuth'
+import { DashboardShell } from '@/components/layout/DashboardShell'
+import { TopBar } from '@/components/layout/TopBar'
 
 const AC  = '#a855f7'
 const AC2 = 'color-mix(in srgb,#a855f7 45%,#ffffff)'
@@ -202,20 +204,19 @@ export default function EstoquePage() {
   const totalRevenue = products.reduce((s, p) => s + p.sold_units * p.price, 0)
 
   return (
-    <div style={{ padding: 32, fontFamily: "'Manrope',sans-serif", color: '#f4f2f8', minHeight: '100vh', background: '#08070c' }}>
-      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-
-        {/* HEADER */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
-          <div>
-            <h1 style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 900, fontSize: 28, margin: 0 }}>Estoque</h1>
-            <p style={{ margin: '6px 0 0', fontSize: 14, color: 'rgba(244,242,248,.45)' }}>Gerencie produtos e proxies por categoria</p>
-          </div>
+    <DashboardShell isAdmin userName="Admin">
+      <TopBar
+        title="Estoque"
+        sub="Gerencie produtos e proxies por categoria"
+        actions={
           <button onClick={() => { setProdModal(true); setProdErr('') }} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: AC, color: '#0a0612', fontWeight: 800, fontSize: 14, padding: '11px 20px', borderRadius: 12, border: 'none', cursor: 'pointer' }}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14"/></svg>
             Novo Produto
           </button>
-        </div>
+        }
+      />
+      <div style={{ padding: 32, fontFamily: "'Manrope',sans-serif", color: '#f4f2f8' }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
 
         {/* STATS */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 28 }}>
@@ -508,6 +509,7 @@ export default function EstoquePage() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </DashboardShell>
   )
 }

@@ -16,6 +16,7 @@ export interface Database {
           tier: 'bronze' | 'prata' | 'ouro' | 'diamante'
           created_at: string
           blocked: boolean
+          first_purchase_coupon_used: boolean
         }
         Insert: {
           id: string
@@ -24,6 +25,7 @@ export interface Database {
           whatsapp?: string | null
           tier?: 'bronze' | 'prata' | 'ouro' | 'diamante'
           blocked?: boolean
+          first_purchase_coupon_used?: boolean
         }
         Update: {
           email?: string
@@ -31,6 +33,7 @@ export interface Database {
           whatsapp?: string | null
           tier?: 'bronze' | 'prata' | 'ouro' | 'diamante'
           blocked?: boolean
+          first_purchase_coupon_used?: boolean
         }
       }
 
