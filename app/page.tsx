@@ -6,6 +6,7 @@ import { onAuthStateChanged, User, updateProfile, updatePassword, EmailAuthProvi
 import { auth } from '@/lib/firebase/client'
 import { WorldMap } from '@/components/WorldMap'
 import { CheckoutModal } from '@/components/CheckoutModal'
+import type { ProxyResult } from '@/app/api/proxy-check/route'
 
 const AC = '#a855f7'
 const AC2 = 'color-mix(in srgb,#a855f7 45%,#ffffff)'
@@ -115,6 +116,37 @@ export default function LandingPage() {
 
   const [checkoutPlan, setCheckoutPlan] = useState<string | null>(null)
 
+  // Proxy checker
+  const [cInput, setCInput]     = useState('')
+  const [cResults, setCResults] = useState<ProxyResult[]>([])
+  const [cLoading, setCLoading] = useState(false)
+  const [cTested, setCTested]   = useState(0)
+  const [cTotal, setCTotal]     = useState(0)
+
+  async function runChecker() {
+    const proxies = cInput.split('\n').map(l => l.trim()).filter(Boolean)
+    if (!proxies.length) return
+    setCLoading(true); setCResults([]); setCTested(0); setCTotal(proxies.length)
+    for (let i = 0; i < proxies.length; i += 10) {
+      const batch = proxies.slice(i, i + 10)
+      try {
+        const res = await fetch('/api/proxy-check', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ proxies: batch }) })
+        const data: ProxyResult[] = await res.json()
+        setCResults(prev => [...prev, ...data])
+        setCTested(prev => prev + data.length)
+      } catch { setCTested(prev => prev + batch.length) }
+    }
+    setCLoading(false)
+  }
+
+  function exportCheckerCsv() {
+    const header = 'Proxy,Host,Porta,IP de Saída,Status,Latência (ms),País,Cidade,ISP,Anônimo'
+    const rows = cResults.map(r => [`"${r.raw}"`, r.host, r.port, r.exitIp ?? '-', r.status, r.latency ?? '-', r.country ?? '-', r.city ?? '-', `"${r.isp ?? '-'}"`, r.anonymous ? 'Sim' : 'Não'].join(','))
+    const blob = new Blob([[header, ...rows].join('\n')], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = 'proxies.csv'; a.click(); URL.revokeObjectURL(url)
+  }
+
   const [scrolled, setScrolled] = useState(false)
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20)
@@ -153,22 +185,23 @@ export default function LandingPage() {
               <span style={{ display: 'inline-flex', filter: `drop-shadow(0 0 10px color-mix(in srgb,${AC} 70%,transparent))` }}>
                 <svg width="30" height="30" viewBox="0 0 34 34" fill="none"><circle cx="17" cy="17" r="14.5" stroke={AC} strokeWidth="2" opacity=".35"/><path d="M17 2.5a14.5 14.5 0 0 1 0 29" stroke={AC2} strokeWidth="2.6" strokeLinecap="round"/><circle cx="17" cy="17" r="4.6" fill={AC}/></svg>
               </span>
-              <span style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 800, fontSize: 19, letterSpacing: '-.02em' }}>LUMA<span style={{ color: AC2 }}> PROXIES</span></span>
+              <span style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 600, fontSize: 19, letterSpacing: '-.02em' }}>LUMA<span style={{ color: AC2 }}> PROXIES</span></span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 26, fontSize: 14, fontWeight: 600, color: 'rgba(244,242,248,.72)' }}>
-              <a href="#como-funciona" style={{ color: 'inherit', textDecoration: 'none' }}>Como funciona</a>
-              <a href="#planos" style={{ color: 'inherit', textDecoration: 'none' }}>Preços</a>
-              <a href="#faq" style={{ color: 'inherit', textDecoration: 'none' }}>FAQ</a>
+              <a href="#como-funciona" className="nav-link">Como funciona</a>
+              <a href="#planos" className="nav-link">Preços</a>
+              <a href="#faq" className="nav-link">FAQ</a>
+              <a href="#checker" className="nav-link">Checker</a>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               {user === undefined ? null : user ? (
-                <button onClick={() => { setModalTab('visao-geral'); setModalOpen(true) }} style={{ display: 'inline-flex', alignItems: 'center', gap: 10, background: 'rgba(168,85,247,.12)', border: `1px solid color-mix(in srgb,${AC} 30%,transparent)`, borderRadius: 999, padding: '7px 14px 7px 7px', cursor: 'pointer', color: '#f4f2f8', transition: 'background .15s' }}>
-                  <span style={{ width: 32, height: 32, borderRadius: '50%', background: AC, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, color: '#0a0612', flexShrink: 0, overflow: 'hidden' }}>
+                <button onClick={() => { setModalTab('visao-geral'); setModalOpen(true) }} className="btn-user">
+                  <span style={{ width: 32, height: 32, borderRadius: '50%', background: AC, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: 13, color: '#0a0612', flexShrink: 0, overflow: 'hidden' }}>
                     {user.photoURL
                       ? <img src={user.photoURL} width={32} height={32} style={{ objectFit: 'cover', borderRadius: '50%' }} alt="" />
                       : (user.displayName || user.email || '?')[0].toUpperCase()}
                   </span>
-                  <span style={{ fontSize: 13.5, fontWeight: 700, maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <span style={{ fontSize: 13.5, fontWeight: 600, maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {user.displayName || user.email?.split('@')[0]}
                   </span>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: .4 }}><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
@@ -176,7 +209,7 @@ export default function LandingPage() {
               ) : (
                 <>
                   <Link href="/login" style={{ fontSize: 14, fontWeight: 600, color: 'rgba(244,242,248,.8)', textDecoration: 'none' }}>Entrar</Link>
-                  <Link href="/cadastro" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: AC, color: '#0a0612', fontWeight: 800, fontSize: 14, padding: '11px 18px', borderRadius: 12, textDecoration: 'none', boxShadow: `0 8px 28px color-mix(in srgb,${AC} 50%,transparent)` }}>
+                  <Link href="/cadastro" className="btn-nav">
                     Começar agora
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
                   </Link>
@@ -190,49 +223,59 @@ export default function LandingPage() {
       <div style={{ position: 'relative', zIndex: 2, paddingTop: 60 }}>
 
         {/* HERO */}
-        <header style={{ maxWidth: 1180, margin: '0 auto', padding: '78px 20px 40px', display: 'grid', gridTemplateColumns: '1.08fr .92fr', gap: 48, alignItems: 'start' }}>
+        <header style={{ maxWidth: 1180, margin: '0 auto', padding: '78px 20px 0', display: 'grid', gridTemplateColumns: '1.08fr .92fr', gap: 48, alignItems: 'start' }}>
           <div style={{ animation: 'lumaRise .7s ease both', textAlign: 'left' }}>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 9, border: `1px solid color-mix(in srgb,${AC} 30%,transparent)`, background: `color-mix(in srgb,${AC} 10%,transparent)`, borderRadius: 999, padding: '7px 14px', fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, letterSpacing: '.16em', color: AC2, textTransform: 'uppercase' }}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#34d399', boxShadow: '0 0 6px #34d399', display: 'inline-block', animation: 'lumaBlink 1.4s infinite' }} />IPs Residenciais Reais · Rotação Automática
             </div>
-            <h1 style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 800, fontSize: 54, lineHeight: 1.0, letterSpacing: '-.025em', margin: '22px 0 0', textAlign: 'left' }}>
+            <h1 style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 600, fontSize: 54, lineHeight: 1.0, letterSpacing: '-.025em', margin: '22px 0 0', textAlign: 'left' }}>
               Proxy <span style={{ color: AC }}>Residencial</span><br /><span style={{ color: AC }}>Rotativa</span> Premium
             </h1>
             <p style={{ fontSize: 16, lineHeight: 1.65, color: 'rgba(244,242,248,.6)', maxWidth: 480, margin: '22px 0 0' }}>IPs residenciais reais com rotação automática. Pague só pelo que usar, acompanhe o consumo <b style={{ color: '#f4f2f8' }}>em tempo real</b>.</p>
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 13, marginTop: 30 }}>
               {user ? (
-                <button onClick={() => setCheckoutPlan('5')} style={{ display: 'inline-flex', alignItems: 'center', gap: 9, background: AC, color: '#0a0612', fontWeight: 800, fontSize: 15.5, padding: '15px 26px', borderRadius: 14, border: 'none', cursor: 'pointer', boxShadow: `0 12px 36px color-mix(in srgb,${AC} 48%,transparent)`, fontFamily: "'Manrope',sans-serif" }}>
+                <button onClick={() => setCheckoutPlan('5')} className="btn-primary">
                   Comece agora <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
                 </button>
               ) : (
-                <Link href="/cadastro" style={{ display: 'inline-flex', alignItems: 'center', gap: 9, background: AC, color: '#0a0612', fontWeight: 800, fontSize: 15.5, padding: '15px 26px', borderRadius: 14, textDecoration: 'none', boxShadow: `0 12px 36px color-mix(in srgb,${AC} 48%,transparent)` }}>
+                <Link href="/cadastro" className="btn-primary">
                   Comece agora <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
                 </Link>
               )}
-              <a href="#planos" style={{ display: 'inline-flex', alignItems: 'center', gap: 9, background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.12)', color: '#f4f2f8', fontWeight: 700, fontSize: 15.5, padding: '15px 24px', borderRadius: 14, textDecoration: 'none' }}>Ver preços</a>
+              <a href="#planos" className="btn-secondary">Ver preços</a>
             </div>
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 24 }}>
               {[
-                { icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={AC2} strokeWidth="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>, text: '90M+ IPs reais' },
                 { icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={AC2} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/></svg>, text: 'Rotação automática' },
-                { icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={AC2} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>, text: 'Pay-per-GB' },
+                { icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={AC2} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>, text: 'Pay per Use' },
                 { icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={AC2} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6M21 19a2 2 0 0 1-2 2h-1v-7h3M3 19a2 2 0 0 0 2 2h1v-7H3"/></svg>, text: 'Suporte 24/7' },
+                { icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={AC2} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>, text: '100% Anônimo' },
               ].map(item => (
-                <div key={item.text} style={{ display: 'flex', alignItems: 'center', gap: 8, border: '1px solid rgba(255,255,255,.09)', background: 'rgba(255,255,255,.025)', borderRadius: 11, padding: '10px 14px', fontSize: 13.5, fontWeight: 600, color: 'rgba(244,242,248,.82)' }}>
+                <div key={item.text} className="pill-hover" style={{ display: 'flex', alignItems: 'center', gap: 8, border: '1px solid rgba(255,255,255,.09)', background: 'rgba(255,255,255,.025)', borderRadius: 11, padding: '10px 14px', fontSize: 13.5, fontWeight: 600, color: 'rgba(244,242,248,.82)' }}>
                   {item.icon}{item.text}
                 </div>
               ))}
             </div>
 
-            <div style={{ marginTop: 26, border: '1px solid rgba(255,255,255,.08)', background: 'rgba(255,255,255,.02)', borderRadius: 16, padding: '16px 18px' }}>
+            <div className="panel-hover" style={{ marginTop: 26, border: '1px solid rgba(255,255,255,.08)', background: 'rgba(255,255,255,.02)', borderRadius: 16, padding: '16px 18px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14 }}>
                 <span style={{ color: AC2, letterSpacing: 2 }}>★★★★★</span>
-                <b style={{ color: '#f4f2f8' }}>4,9/5</b><span style={{ color: 'rgba(244,242,248,.45)' }}>· 2.300+ avaliações verificadas</span>
+                <b style={{ color: '#f4f2f8' }}>4,9/5</b><span style={{ color: 'rgba(244,242,248,.45)' }}>· +567 avaliações verificadas</span>
               </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 18, marginTop: 13, fontFamily: "'JetBrains Mono',monospace", fontSize: 10.5, letterSpacing: '.13em', color: 'rgba(244,242,248,.5)', textTransform: 'uppercase' }}>
-                <span>◇ ANTI-DETECÇÃO</span><span>⚡ ATIVAÇÃO 30S</span><span>↻ ROTAÇÃO AUTO</span><span>◈ PIX · CRYPTO · CARD</span>
+              <div style={{ height: 1, background: 'rgba(255,255,255,.06)', margin: '13px 0' }} />
+              <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10.5, letterSpacing: '.13em', color: 'rgba(244,242,248,.5)', textTransform: 'uppercase', display: 'flex', gap: 18 }}>
+                <span>{'⚡︎'} ATIVAÇÃO IMEDIATA</span>
+                <span style={{ opacity: .3 }}>·</span>
+                <span>{'🛡︎'} ANTI-DETECÇÃO</span>
+                <span style={{ opacity: .3 }}>·</span>
+                <span>↻ ROTAÇÃO AUTO</span>
+              </div>
+              <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10.5, letterSpacing: '.13em', color: 'rgba(244,242,248,.5)', textTransform: 'uppercase', marginTop: 8, display: 'flex', gap: 18 }}>
+                <span>$ PIX</span>
+                <span style={{ opacity: .3 }}>·</span>
+                <span>₿ CRYPTO</span>
               </div>
               <div style={{ marginTop: 13, paddingTop: 13, borderTop: '1px solid rgba(255,255,255,.06)', fontFamily: "'JetBrains Mono',monospace", fontSize: 11, letterSpacing: '.1em', color: 'rgba(244,242,248,.55)' }}>
                 <span style={{ color: '#34d399' }}>●</span> 99.98% UPTIME — TODOS OS SISTEMAS OPERACIONAIS
@@ -246,84 +289,21 @@ export default function LandingPage() {
               <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#34d399', animation: 'lumaBlink 1.6s infinite', display: 'inline-block' }} />
               Cobertura global · +180 países
             </div>
-            <div style={{ width: '100%', border: '1px solid rgba(255,255,255,.07)', borderRadius: 18, background: 'rgba(255,255,255,.018)', padding: '20px 16px 14px', overflow: 'hidden' }}>
+            <div className="panel-hover" style={{ width: '100%', border: '1px solid rgba(255,255,255,.07)', borderRadius: 18, background: 'rgba(255,255,255,.018)', padding: '20px 16px 14px', overflow: 'hidden' }}>
               <WorldMap />
             </div>
           </div>
 
         </header>
 
-        {/* MARQUEE */}
-        <Reveal>
-          <section style={{ marginTop: 34, borderTop: '1px solid rgba(255,255,255,.06)', borderBottom: '1px solid rgba(255,255,255,.06)', padding: '26px 0', background: 'rgba(255,255,255,.012)' }}>
-            <div style={{ textAlign: 'center', fontFamily: "'JetBrains Mono',monospace", fontSize: 11, letterSpacing: '.22em', color: 'rgba(244,242,248,.4)', textTransform: 'uppercase', marginBottom: 20 }}>Compatível com casas de aposta, bots e antidetect</div>
-            <div style={{ overflow: 'hidden', WebkitMaskImage: 'linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent)', maskImage: 'linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent)' }}>
-              <div style={{ display: 'flex', gap: 14, width: 'max-content', animation: 'lumaMarquee 34s linear infinite' }}>
-                {[1, 2].map(k => (
-                  <div key={k} style={{ display: 'flex', gap: 14 }} aria-hidden={k === 2}>
-                    {['Selenium','Puppeteer','Playwright','AdsPower','Multilogin','GoLogin','Dolphin','Cassino','Apostas Esportivas'].map(t => (
-                      <span key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: 9, border: '1px solid rgba(255,255,255,.09)', background: 'rgba(255,255,255,.02)', borderRadius: 999, padding: '11px 18px', fontWeight: 700, fontSize: 14, color: 'rgba(244,242,248,.78)' }}>
-                        <span style={{ color: AC2 }}>▢</span>{t}
-                      </span>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-        </Reveal>
-
-        {/* WHO IT'S FOR */}
-        <section style={{ maxWidth: 1180, margin: '0 auto', padding: '96px 20px 0' }}>
-          <Reveal>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, letterSpacing: '.14em', color: AC2, textTransform: 'uppercase' }}>Para quem é</div>
-              <h2 style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 800, fontSize: 40, lineHeight: 1.06, letterSpacing: '-.02em', margin: '14px 0 0' }}>Feito para quem <span style={{ color: AC }}>opera no limite.</span></h2>
-              <p style={{ fontSize: 16.5, color: 'rgba(244,242,248,.55)', margin: '14px auto 0', maxWidth: 520 }}>Mais de 50.000 profissionais usam a Luma para escalar sem tomar bloqueio.</p>
-            </div>
-          </Reveal>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 18, marginTop: 46 }}>
-            {[
-              {
-                icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/><circle cx="12" cy="12" r="4"/></svg>,
-                badge: 'MAIS USADO', title: 'Apostas & iGaming',
-                desc: 'Acesse casas internacionais, surebet, multi-contas e arbitragem com IPs residenciais BR limpos. Zero bloqueios.',
-                primary: true,
-              },
-              {
-                icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 8V4M9 14h.01M15 14h.01"/></svg>,
-                badge: null, title: 'Bots & Automação',
-                desc: 'Rode bots 24/7 com Selenium, Puppeteer, Playwright e AdsPower. Rotação automática e anti-detecção embutida.',
-                primary: false,
-              },
-              {
-                icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 17l6-6 4 4 7-7M14 7h5v5"/></svg>,
-                badge: null, title: 'CPA & Gestores de Tráfego',
-                desc: 'Escale campanhas de Meta e Google Ads sem bloqueios. IPs residenciais limpos, contas seguras e operação contínua.',
-                primary: false,
-              },
-            ].map((card, i) => (
-              <Reveal key={card.title} delay={i * 100}>
-                <div style={{ border: card.primary ? `1px solid color-mix(in srgb,${AC} 22%,transparent)` : '1px solid rgba(255,255,255,.08)', background: card.primary ? `linear-gradient(180deg, color-mix(in srgb,${AC} 9%,transparent), rgba(255,255,255,.01))` : 'rgba(255,255,255,.02)', borderRadius: 18, padding: 26, height: '100%' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ display: 'inline-flex', width: 46, height: 46, borderRadius: 12, alignItems: 'center', justifyContent: 'center', background: card.primary ? `color-mix(in srgb,${AC} 16%,transparent)` : 'rgba(255,255,255,.05)', color: AC2 }}>{card.icon}</span>
-                    {card.badge && <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 9.5, letterSpacing: '.14em', background: `color-mix(in srgb,${AC} 20%,transparent)`, color: AC2, padding: '5px 9px', borderRadius: 6 }}>{card.badge}</span>}
-                  </div>
-                  <h3 style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 700, fontSize: 19, margin: '18px 0 8px' }}>{card.title}</h3>
-                  <p style={{ fontSize: 14.5, lineHeight: 1.55, color: 'rgba(244,242,248,.58)', margin: 0 }}>{card.desc}</p>
-                </div>
-              </Reveal>
-            ))}
-          </div>
-        </section>
 
         {/* HOW IT WORKS */}
         <section id="como-funciona" style={{ maxWidth: 1000, margin: '0 auto', padding: '96px 20px 0' }}>
           <Reveal>
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, letterSpacing: '.14em', color: AC2, textTransform: 'uppercase' }}>Proxy Residencial Rotativa</div>
-              <h2 style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 800, fontSize: 40, lineHeight: 1.06, letterSpacing: '-.02em', margin: '14px 0 0' }}>Tudo o que você precisa <span style={{ color: AC }}>em um produto.</span></h2>
-              <p style={{ fontSize: 16.5, color: 'rgba(244,242,248,.55)', margin: '14px auto 0', maxWidth: 500 }}>Sem complicação — escolha seu pacote de GB, ative em segundos e navegue com IP residencial real.</p>
+              <h2 style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 600, fontSize: 40, lineHeight: 1.06, letterSpacing: '-.02em', margin: '14px 0 0' }}>Tudo o que você precisa <span style={{ color: AC }}>em uma proxy.</span></h2>
+              <p style={{ fontSize: 16.5, color: 'rgba(244,242,248,.55)', margin: '14px auto 0', maxWidth: 500 }}>Sem complicação, escolha seu pacote de GB, ative em segundos e navegue com IP residencial real.</p>
             </div>
           </Reveal>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14, marginTop: 46 }}>
@@ -336,10 +316,10 @@ export default function LandingPage() {
               { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6M21 19a2 2 0 0 1-2 2h-1v-7h3M3 19a2 2 0 0 0 2 2h1v-7H3"/></svg>, title: 'Suporte 24/7 em PT', desc: 'Time humano no WhatsApp e chat ao vivo. Resposta média em poucos minutos.', badge: null },
             ].map((f, i) => (
               <Reveal key={f.title} delay={i * 80}>
-                <div style={{ border: '1px solid rgba(255,255,255,.08)', background: 'rgba(255,255,255,.02)', borderRadius: 18, padding: 24, position: 'relative', height: '100%' }}>
+                <div className="card-hover">
                   {f.badge && <span style={{ position: 'absolute', top: 16, right: 16, fontFamily: "'JetBrains Mono',monospace", fontSize: 8.5, letterSpacing: '.1em', background: `color-mix(in srgb,${AC} 20%,transparent)`, color: AC2, padding: '4px 8px', borderRadius: 6 }}>{f.badge}</span>}
                   <span style={{ display: 'inline-flex', width: 46, height: 46, borderRadius: 12, alignItems: 'center', justifyContent: 'center', background: `color-mix(in srgb,${AC} 14%,transparent)`, color: AC2 }}>{f.icon}</span>
-                  <h3 style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 700, fontSize: 17, margin: '14px 0 8px' }}>{f.title}</h3>
+                  <h3 style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 600, fontSize: 17, margin: '14px 0 8px' }}>{f.title}</h3>
                   <p style={{ fontSize: 14, lineHeight: 1.55, color: 'rgba(244,242,248,.55)', margin: 0 }}>{f.desc}</p>
                 </div>
               </Reveal>
@@ -352,19 +332,19 @@ export default function LandingPage() {
           <Reveal>
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, letterSpacing: '.14em', color: AC2, textTransform: 'uppercase' }}>Planos · Residencial Rotativa</div>
-              <h2 style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 800, fontSize: 40, lineHeight: 1.06, letterSpacing: '-.02em', margin: '14px 0 0' }}>Pague só pelo que <span style={{ color: AC }}>usar.</span></h2>
+              <h2 style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 600, fontSize: 40, lineHeight: 1.06, letterSpacing: '-.02em', margin: '14px 0 0' }}>Pague só pelo que <span style={{ color: AC }}>usar.</span></h2>
               <p style={{ fontSize: 16.5, color: 'rgba(244,242,248,.55)', margin: '14px auto 0', maxWidth: 480 }}>Sem mensalidade. Seu GB nunca expira. Quanto mais GB, menor o preço.</p>
             </div>
           </Reveal>
 
           {showCouponBanner && (
             <Reveal delay={120}>
-              <div style={{ maxWidth: 760, margin: '30px auto 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap', border: `1px solid color-mix(in srgb,${AC} 28%,transparent)`, background: `color-mix(in srgb,${AC} 9%,transparent)`, borderRadius: 14, padding: '14px 20px' }}>
+              <div className="panel-hover" style={{ maxWidth: 760, margin: '30px auto 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap', border: `1px solid color-mix(in srgb,${AC} 28%,transparent)`, background: `color-mix(in srgb,${AC} 9%,transparent)`, borderRadius: 14, padding: '14px 20px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 11, fontSize: 14.5 }}>
                   <span style={{ fontSize: 18 }}>🎁</span>
                   <span>Primeira compra com 10% off — cupom <b style={{ color: '#fff', fontFamily: "'JetBrains Mono',monospace" }}>LUMA10</b> aplicado automaticamente no checkout</span>
                 </div>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(52,211,153,.12)', border: '1px solid rgba(52,211,153,.25)', borderRadius: 8, padding: '7px 13px', fontFamily: "'JetBrains Mono',monospace", fontSize: 11, fontWeight: 700, color: '#34d399', letterSpacing: '.08em' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(52,211,153,.12)', border: '1px solid rgba(52,211,153,.25)', borderRadius: 8, padding: '7px 13px', fontFamily: "'JetBrains Mono',monospace", fontSize: 11, fontWeight: 600, color: '#34d399', letterSpacing: '.08em' }}>
                   ✓ LUMA10
                 </span>
               </div>
@@ -381,13 +361,13 @@ export default function LandingPage() {
             ].map((p, i) => {
               return (
               <Reveal key={p.gb} delay={i * 80}>
-                <div style={{ position: 'relative', border: p.highlight ? `1.5px solid ${AC}` : '1px solid rgba(255,255,255,.08)', background: p.highlight ? `linear-gradient(180deg, color-mix(in srgb,${AC} 16%,transparent), rgba(255,255,255,.01))` : 'rgba(255,255,255,.02)', borderRadius: 15, padding: '20px 14px', textAlign: 'center', boxShadow: p.highlight ? `0 12px 40px color-mix(in srgb,${AC} 28%,transparent)` : 'none', height: '100%' }}>
-                  {p.badge && <span style={{ position: 'absolute', top: -11, left: '50%', transform: 'translateX(-50%)', fontFamily: "'JetBrains Mono',monospace", fontSize: 8.5, letterSpacing: '.1em', background: p.highlight ? AC : 'rgba(52,211,153,.18)', color: p.highlight ? '#0a0612' : '#34d399', padding: '4px 9px', borderRadius: 6, whiteSpace: 'nowrap', fontWeight: 700 }}>{p.badge}</span>}
+                <div className={`pricing-card${p.highlight ? ' pricing-card-highlight' : ''}`} style={{ border: p.highlight ? `1.5px solid ${AC}` : '1px solid rgba(255,255,255,.08)', background: p.highlight ? `linear-gradient(180deg, color-mix(in srgb,${AC} 16%,transparent), rgba(255,255,255,.01))` : 'rgba(255,255,255,.02)', boxShadow: p.highlight ? `0 12px 40px color-mix(in srgb,${AC} 28%,transparent)` : 'none' }}>
+                  {p.badge && <span style={{ position: 'absolute', top: -11, left: '50%', transform: 'translateX(-50%)', fontFamily: "'JetBrains Mono',monospace", fontSize: 8.5, letterSpacing: '.1em', background: p.highlight ? AC : 'rgba(52,211,153,.18)', color: p.highlight ? '#0a0612' : '#34d399', padding: '4px 9px', borderRadius: 6, whiteSpace: 'nowrap', fontWeight: 600 }}>{p.badge}</span>}
                   <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 9, letterSpacing: '.14em', color: p.highlight ? AC2 : 'rgba(244,242,248,.4)', textTransform: 'uppercase' }}>RES · ROTATIVA</div>
-                  <div style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 800, fontSize: 28, margin: '8px 0 2px' }}>{p.gb} <span style={{ fontSize: 14, color: 'rgba(244,242,248,.5)' }}>GB</span></div>
-                  <div style={{ color: p.highlight ? '#fff' : AC, fontWeight: 800, fontSize: 15, marginTop: 6 }}>{p.price}</div>
+                  <div style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 600, fontSize: 28, margin: '8px 0 2px' }}>{p.gb} <span style={{ fontSize: 14, color: 'rgba(244,242,248,.5)' }}>GB</span></div>
+                  <div style={{ color: p.highlight ? '#fff' : AC, fontWeight: 600, fontSize: 15, marginTop: 6 }}>{p.price}</div>
                   <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 9.5, color: 'rgba(244,242,248,.35)', marginTop: 5 }}>{p.perGb}</div>
-                  <button onClick={() => setCheckoutPlan(p.gb)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', marginTop: 14, padding: '9px 0', borderRadius: 9, background: p.highlight ? AC : 'rgba(255,255,255,.06)', border: p.highlight ? 'none' : '1px solid rgba(255,255,255,.1)', color: p.highlight ? '#0a0612' : 'rgba(244,242,248,.8)', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', fontFamily: "'Manrope',sans-serif" }}>
+                  <button onClick={() => setCheckoutPlan(p.gb)} className={p.highlight ? 'btn-plan-highlight' : 'btn-plan'}>
                     Começar
                   </button>
                 </div>
@@ -397,11 +377,11 @@ export default function LandingPage() {
           <Reveal delay={200}>
             <div style={{ textAlign: 'center', marginTop: 26 }}>
               {user ? (
-                <button onClick={() => setCheckoutPlan('5')} style={{ display: 'inline-flex', alignItems: 'center', gap: 9, background: AC, color: '#0a0612', fontWeight: 800, fontSize: 15.5, padding: '15px 30px', borderRadius: 14, border: 'none', cursor: 'pointer', boxShadow: `0 12px 36px color-mix(in srgb,${AC} 44%,transparent)`, fontFamily: "'Manrope',sans-serif" }}>
+                <button onClick={() => setCheckoutPlan('5')} className="btn-primary">
                   Criar minha proxy agora <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
                 </button>
               ) : (
-                <Link href="/cadastro" style={{ display: 'inline-flex', alignItems: 'center', gap: 9, background: AC, color: '#0a0612', fontWeight: 800, fontSize: 15.5, padding: '15px 30px', borderRadius: 14, textDecoration: 'none', boxShadow: `0 12px 36px color-mix(in srgb,${AC} 44%,transparent)` }}>
+                <Link href="/cadastro" className="btn-primary">
                   Criar minha proxy agora <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
                 </Link>
               )}
@@ -409,43 +389,115 @@ export default function LandingPage() {
           </Reveal>
         </section>
 
-        {/* WHY + LIVE STATS */}
-        <section style={{ maxWidth: 1180, margin: '0 auto', padding: '96px 20px 0', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 48, alignItems: 'center' }}>
+        {/* PROXY CHECKER */}
+        <section id="checker" style={{ maxWidth: 980, margin: '0 auto', padding: '96px 20px 0' }}>
           <Reveal>
-            <div>
-              <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, letterSpacing: '.14em', color: AC2, textTransform: 'uppercase' }}>Por que Luma</div>
-              <h2 style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 800, fontSize: 38, lineHeight: 1.06, letterSpacing: '-.02em', margin: '14px 0 0' }}>Sua infra de proxies, <span style={{ color: AC }}>sem dor de cabeça.</span></h2>
-              <p style={{ fontSize: 16, lineHeight: 1.6, color: 'rgba(244,242,248,.58)', margin: '18px 0 0', maxWidth: 460 }}>A Luma é parceira de quem precisa de proxies residenciais rotativas de alta performance. Acesso a milhões de IPs reais, pagamento flexível, suporte humano e uma política justa: <b style={{ color: '#f4f2f8' }}>seu GB nunca expira.</b></p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 28 }}>
-                {['90M+ IPs residenciais reais em +180 países', 'Pague só pelo que usar — GB nunca expira', 'Ativação instantânea via PIX, crypto ou cartão', 'Suporte humano 24/7 em português'].map(item => (
-                  <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <span style={{ display: 'inline-flex', width: 26, height: 26, flexShrink: 0, borderRadius: '50%', alignItems: 'center', justifyContent: 'center', background: `color-mix(in srgb,${AC} 22%,transparent)`, color: AC2, fontSize: 13 }}>✓</span>
-                    <span style={{ fontSize: 15, color: 'rgba(244,242,248,.82)' }}>{item}</span>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, letterSpacing: '.14em', color: AC2, textTransform: 'uppercase' }}>Ferramenta gratuita</div>
+              <h2 style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 600, fontSize: 40, lineHeight: 1.06, letterSpacing: '-.02em', margin: '14px 0 0' }}>Proxy <span style={{ color: AC }}>Checker</span></h2>
+              <p style={{ fontSize: 16, color: 'rgba(244,242,248,.55)', margin: '14px auto 0', maxWidth: 480 }}>Teste proxies HTTP, HTTPS e SOCKS5 com geolocalização, latência e status em tempo real.</p>
+            </div>
+          </Reveal>
+
+          <Reveal delay={80}>
+            <div className="panel-hover" style={{ marginTop: 36, border: '1px solid rgba(255,255,255,.08)', background: 'rgba(255,255,255,.02)', borderRadius: 18, padding: '22px 24px 24px' }}>
+              <label style={{ display: 'block', fontFamily: "'JetBrains Mono',monospace", fontSize: 10.5, letterSpacing: '.14em', color: 'rgba(244,242,248,.4)', textTransform: 'uppercase', marginBottom: 12 }}>
+                Proxies <span style={{ color: 'rgba(244,242,248,.2)' }}>· máx. 50</span>
+              </label>
+              <textarea
+                value={cInput}
+                onChange={e => setCInput(e.target.value)}
+                placeholder={'Uma proxy por linha. Formatos:\nIP:PORTA:USUARIO:SENHA\nIP:PORTA\nUSUARIO:SENHA@IP:PORTA\nsocks5://USUARIO:SENHA@IP:PORTA'}
+                rows={6}
+                style={{ width: '100%', background: 'rgba(255,255,255,.03)', border: '1px solid rgba(255,255,255,.08)', borderRadius: 10, padding: '12px 14px', color: '#f4f2f8', fontFamily: "'JetBrains Mono',monospace", fontSize: 13, lineHeight: 1.7, resize: 'vertical', outline: 'none', boxSizing: 'border-box', caretColor: AC }}
+              />
+              <button
+                onClick={runChecker}
+                disabled={cLoading || !cInput.trim()}
+                className="btn-primary"
+                style={{ width: '100%', justifyContent: 'center', fontSize: 15, padding: '14px 0', marginTop: 14 }}
+              >
+                {cLoading
+                  ? <>◌ Testando… ({cTested}/{cTotal})</>
+                  : <>Testar <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></>}
+              </button>
+            </div>
+          </Reveal>
+
+          {(cResults.length > 0 || cLoading) && (
+            <Reveal>
+              <div style={{ marginTop: 16, border: '1px solid rgba(255,255,255,.08)', background: 'rgba(255,255,255,.02)', borderRadius: 18, overflow: 'hidden' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', borderBottom: '1px solid rgba(255,255,255,.06)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={AC2} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                    <span style={{ fontWeight: 600, fontSize: 14 }}>Resultado</span>
+                    {cLoading && <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10.5, color: 'rgba(244,242,248,.35)', letterSpacing: '.08em' }}>processando {cTested}/{cTotal}…</span>}
                   </div>
-                ))}
-              </div>
-            </div>
-          </Reveal>
-          <Reveal delay={150}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div style={{ border: `1px solid color-mix(in srgb,${AC} 20%,transparent)`, background: `linear-gradient(180deg, color-mix(in srgb,${AC} 8%,transparent), rgba(255,255,255,.01))`, borderRadius: 18, padding: 26 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: "'JetBrains Mono',monospace", fontSize: 10, letterSpacing: '.16em', color: 'rgba(244,242,248,.5)', textTransform: 'uppercase' }}>
-                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#34d399', animation: 'lumaBlink 1.5s infinite', display: 'inline-block' }} />IPs ativos agora
+                  {cResults.length > 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, color: 'rgba(244,242,248,.4)' }}>
+                        <span style={{ color: '#34d399' }}>{cResults.filter(r => r.status === 'success').length}</span> / {cResults.length} com sucesso
+                      </span>
+                      <button onClick={exportCheckerCsv} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.1)', borderRadius: 8, padding: '6px 12px', color: 'rgba(244,242,248,.8)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                        Exportar CSV
+                      </button>
+                    </div>
+                  )}
                 </div>
-                <div style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 900, fontSize: 46, letterSpacing: '-.02em', marginTop: 10, color: '#fff' }}>{fmt(ips)}</div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                <div style={{ border: '1px solid rgba(255,255,255,.08)', background: 'rgba(255,255,255,.02)', borderRadius: 18, padding: 24 }}>
-                  <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, letterSpacing: '.16em', color: 'rgba(244,242,248,.5)', textTransform: 'uppercase' }}><span style={{ color: AC2 }}>∿</span> Req / seg</div>
-                  <div style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 900, fontSize: 34, marginTop: 10 }}>{fmt(rps)}</div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid rgba(255,255,255,.06)' }}>
+                        {['Endereço IP', 'Porta', 'IP de saída', 'Estado', 'Latência', 'Local', 'ISP', 'Anônimo'].map(h => (
+                          <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontFamily: "'JetBrains Mono',monospace", fontSize: 9.5, letterSpacing: '.1em', color: 'rgba(244,242,248,.3)', textTransform: 'uppercase', fontWeight: 500, whiteSpace: 'nowrap' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cResults.map((r, i) => (
+                        <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,.04)' }}>
+                          <td style={{ padding: '12px 16px', fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: 'rgba(244,242,248,.8)', whiteSpace: 'nowrap' }}>{r.host || r.raw.split(':')[0]}</td>
+                          <td style={{ padding: '12px 16px', fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: 'rgba(244,242,248,.45)' }}>{r.port || '-'}</td>
+                          <td style={{ padding: '12px 16px', fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: r.exitIp ? '#f4f2f8' : 'rgba(244,242,248,.25)', whiteSpace: 'nowrap' }}>{r.exitIp ?? '—'}</td>
+                          <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
+                            {r.status === 'success'
+                              ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#34d399', fontWeight: 600, fontSize: 12.5 }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Sucesso</span>
+                              : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#f87171', fontWeight: 600, fontSize: 12.5 }} title={r.error}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>Falha</span>}
+                          </td>
+                          <td style={{ padding: '12px 16px', fontFamily: "'JetBrains Mono',monospace", fontSize: 12, whiteSpace: 'nowrap' }}>
+                            {r.latency != null
+                              ? <span style={{ color: r.latency < 600 ? '#34d399' : r.latency < 1500 ? '#fbbf24' : '#f87171' }}>{r.latency} ms</span>
+                              : <span style={{ color: 'rgba(244,242,248,.2)' }}>—</span>}
+                          </td>
+                          <td style={{ padding: '12px 16px', fontSize: 13, whiteSpace: 'nowrap', color: 'rgba(244,242,248,.7)' }}>
+                            {r.country
+                              ? <>{r.countryCode && String.fromCodePoint(0x1F1E6 + r.countryCode.charCodeAt(0) - 65, 0x1F1E6 + r.countryCode.charCodeAt(1) - 65)} {r.city ? `${r.city}, ` : ''}{r.countryCode}</>
+                              : <span style={{ color: 'rgba(244,242,248,.2)' }}>—</span>}
+                          </td>
+                          <td style={{ padding: '12px 16px', fontSize: 12.5, color: 'rgba(244,242,248,.55)', maxWidth: 180 }}>
+                            <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.isp ?? <span style={{ color: 'rgba(244,242,248,.2)' }}>—</span>}</span>
+                          </td>
+                          <td style={{ padding: '12px 16px', fontSize: 13 }}>
+                            {r.anonymous ? <span style={{ color: '#34d399', fontWeight: 600 }}>Anônimo</span> : <span style={{ color: 'rgba(244,242,248,.25)' }}>—</span>}
+                          </td>
+                        </tr>
+                      ))}
+                      {cLoading && Array.from({ length: Math.min(cTotal - cTested, 3) }).map((_, i) => (
+                        <tr key={`sk${i}`} style={{ borderBottom: '1px solid rgba(255,255,255,.04)' }}>
+                          {Array.from({ length: 8 }).map((_, j) => (
+                            <td key={j} style={{ padding: '12px 16px' }}>
+                              <span style={{ display: 'block', height: 12, borderRadius: 5, background: 'rgba(255,255,255,.05)', width: j === 0 ? 110 : j === 5 ? 90 : 50, animation: 'lumaBlink 1.4s infinite' }} />
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-                <div style={{ border: '1px solid rgba(255,255,255,.08)', background: 'rgba(255,255,255,.02)', borderRadius: 18, padding: 24 }}>
-                  <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, letterSpacing: '.16em', color: 'rgba(244,242,248,.5)', textTransform: 'uppercase' }}><span style={{ color: AC2 }}>⚷</span> Uptime</div>
-                  <div style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 900, fontSize: 34, marginTop: 10 }}>99,98<span style={{ fontSize: 18, color: 'rgba(244,242,248,.5)' }}>%</span></div>
-                </div>
               </div>
-            </div>
-          </Reveal>
+            </Reveal>
+          )}
         </section>
 
         {/* FAQ */}
@@ -453,7 +505,7 @@ export default function LandingPage() {
           <Reveal>
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, letterSpacing: '.14em', color: AC2, textTransform: 'uppercase' }}>Dúvidas frequentes</div>
-              <h2 style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 800, fontSize: 38, lineHeight: 1.06, letterSpacing: '-.02em', margin: '14px 0 0' }}>Perguntas <span style={{ color: AC }}>frequentes.</span></h2>
+              <h2 style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 600, fontSize: 38, lineHeight: 1.06, letterSpacing: '-.02em', margin: '14px 0 0' }}>Perguntas <span style={{ color: AC }}>frequentes.</span></h2>
             </div>
           </Reveal>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 38 }}>
@@ -466,8 +518,8 @@ export default function LandingPage() {
               { q: 'Tem suporte em português?', a: 'Sim, suporte humano 24/7 em português e inglês, via WhatsApp e chat ao vivo. Resposta média em poucos minutos.' },
             ].map((f, i) => (
               <Reveal key={i} delay={i * 60}>
-                <div style={{ border: '1px solid rgba(255,255,255,.08)', background: 'rgba(255,255,255,.02)', borderRadius: 14, overflow: 'hidden' }}>
-                  <button onClick={() => toggle(i)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, background: 'none', border: 'none', color: '#f4f2f8', fontFamily: "'Manrope',sans-serif", fontWeight: 700, fontSize: 16, textAlign: 'left', padding: '20px 22px', cursor: 'pointer' }}>
+                <div className="faq-item">
+                  <button onClick={() => toggle(i)} className="faq-btn">
                     {f.q}<span style={{ color: AC2, fontSize: 22, flexShrink: 0 }}>{open === i ? '−' : '+'}</span>
                   </button>
                   {open === i && <div style={{ padding: '0 22px 20px', fontSize: 14.5, lineHeight: 1.6, color: 'rgba(244,242,248,.6)' }}>{f.a}</div>}
@@ -483,22 +535,22 @@ export default function LandingPage() {
             <div style={{ position: 'relative', overflow: 'hidden', border: `1px solid color-mix(in srgb,${AC} 30%,transparent)`, borderRadius: 26, background: `linear-gradient(135deg, color-mix(in srgb,${AC} 16%,transparent), rgba(255,255,255,.01))`, padding: '62px 40px', textAlign: 'center' }}>
               <div style={{ position: 'absolute', top: -120, left: '50%', transform: 'translateX(-50%)', width: 560, height: 360, background: `radial-gradient(ellipse at center, color-mix(in srgb,${AC} 32%,transparent), transparent 70%)`, filter: 'blur(14px)', pointerEvents: 'none' }} />
               <div style={{ position: 'relative' }}>
-                <h2 style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 800, fontSize: 44, lineHeight: 1.04, letterSpacing: '-.025em', margin: 0 }}>Comece a escalar<br />com a <span style={{ color: AC }}>Luma</span> hoje.</h2>
-                <p style={{ fontSize: 17, color: 'rgba(244,242,248,.6)', margin: '18px auto 0', maxWidth: 460 }}>Ative em 30 segundos. Sem mensalidade, sem fidelidade — só performance.</p>
+                <h2 style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 600, fontSize: 44, lineHeight: 1.04, letterSpacing: '-.025em', margin: 0 }}>Comece a escalar<br />com a <span style={{ color: AC }}>Luma</span> hoje.</h2>
+                <p style={{ fontSize: 17, color: 'rgba(244,242,248,.6)', margin: '18px auto 0', maxWidth: 460 }}>Sem mensalidade, seus GB nunca expiram. Ativação imediata via PIX ou cripto.</p>
                 <div style={{ display: 'flex', gap: 13, justifyContent: 'center', flexWrap: 'wrap', marginTop: 30 }}>
                   {user ? (
-                    <button onClick={() => setCheckoutPlan('5')} style={{ display: 'inline-flex', alignItems: 'center', gap: 9, background: AC, color: '#0a0612', fontWeight: 800, fontSize: 16, padding: '16px 30px', borderRadius: 14, border: 'none', cursor: 'pointer', boxShadow: `0 14px 40px color-mix(in srgb,${AC} 48%,transparent)`, fontFamily: "'Manrope',sans-serif" }}>
+                    <button onClick={() => setCheckoutPlan('5')} className="btn-primary" style={{ fontSize: 16, padding: '16px 30px' }}>
                       Comece agora <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
                     </button>
                   ) : (
-                    <Link href="/cadastro" style={{ display: 'inline-flex', alignItems: 'center', gap: 9, background: AC, color: '#0a0612', fontWeight: 800, fontSize: 16, padding: '16px 30px', borderRadius: 14, textDecoration: 'none', boxShadow: `0 14px 40px color-mix(in srgb,${AC} 48%,transparent)` }}>
+                    <Link href="/cadastro" className="btn-primary" style={{ fontSize: 16, padding: '16px 30px' }}>
                       Comece agora <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
                     </Link>
                   )}
-                  <a href="#faq" style={{ display: 'inline-flex', alignItems: 'center', gap: 9, background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.14)', color: '#f4f2f8', fontWeight: 700, fontSize: 16, padding: '16px 26px', borderRadius: 14, textDecoration: 'none' }}>Ver perguntas frequentes</a>
+                  <a href="#planos" className="btn-secondary" style={{ fontSize: 16, padding: '16px 26px' }}>Ver planos</a>
                 </div>
                 <div style={{ display: 'flex', gap: 24, justifyContent: 'center', flexWrap: 'wrap', marginTop: 26, fontFamily: "'JetBrains Mono',monospace", fontSize: 10.5, letterSpacing: '.12em', color: 'rgba(244,242,248,.45)', textTransform: 'uppercase' }}>
-                  <span>⚡ Ativação 30s</span><span>↺ Garantia 7 dias</span><span>◷ +2.000 clientes ativos</span>
+                  <span>{'⚡︎'} Ativação imediata</span><span>$ PIX · ₿ Cripto</span><span>↻ Suporte 24/7</span>
                 </div>
               </div>
             </div>
@@ -512,7 +564,7 @@ export default function LandingPage() {
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <svg width="26" height="26" viewBox="0 0 34 34" fill="none"><circle cx="17" cy="17" r="14.5" stroke={AC} strokeWidth="2" opacity=".35"/><path d="M17 2.5a14.5 14.5 0 0 1 0 29" stroke={AC2} strokeWidth="2.6" strokeLinecap="round"/><circle cx="17" cy="17" r="4.6" fill={AC}/></svg>
-                  <span style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 800, fontSize: 17 }}>LUMA<span style={{ color: AC2 }}> PROXIES</span></span>
+                  <span style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 600, fontSize: 17 }}>LUMA<span style={{ color: AC2 }}> PROXIES</span></span>
                 </div>
                 <p style={{ fontSize: 13.5, lineHeight: 1.6, color: 'rgba(244,242,248,.5)', margin: '14px 0 0', maxWidth: 280 }}>Proxies residenciais rotativas premium em +180 países. Setup em segundos, GB nunca expira.</p>
               </div>
@@ -524,7 +576,7 @@ export default function LandingPage() {
                 <div key={col.title}>
                   <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, letterSpacing: '.16em', color: 'rgba(244,242,248,.4)', textTransform: 'uppercase', marginBottom: 14 }}>{col.title}</div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 13.5 }}>
-                    {col.links.map(l => <a key={l} href="#" style={{ color: 'rgba(244,242,248,.65)', textDecoration: 'none' }}>{l}</a>)}
+                    {col.links.map(l => <a key={l} href="#" className="footer-link">{l}</a>)}
                   </div>
                 </div>
               ))}
@@ -558,7 +610,7 @@ export default function LandingPage() {
 
         const tabSt = (t: typeof modalTab): React.CSSProperties => ({
           fontFamily: "'JetBrains Mono',monospace", fontSize: 10.5, letterSpacing: '.14em',
-          textTransform: 'uppercase', fontWeight: 700, padding: '11px 16px',
+          textTransform: 'uppercase', fontWeight: 600, padding: '11px 16px',
           border: 'none', background: 'none', cursor: 'pointer',
           color: modalTab === t ? '#f4f2f8' : 'rgba(244,242,248,.35)',
           borderBottom: modalTab === t ? `2px solid ${AC}` : '2px solid transparent',
@@ -580,13 +632,13 @@ export default function LandingPage() {
                   {user.photoURL ? <img src={user.photoURL} width={56} height={56} style={{ borderRadius: '50%', objectFit: 'cover' }} alt="" /> : initial}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 800, fontSize: 18, color: '#f4f2f8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
+                  <div style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 600, fontSize: 18, color: '#f4f2f8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
                   <div style={{ fontSize: 12.5, color: 'rgba(244,242,248,.4)', marginTop: 2 }}>{email}</div>
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6, background: 'rgba(52,211,153,.1)', border: '1px solid rgba(52,211,153,.18)', borderRadius: 999, padding: '3px 9px', fontSize: 10.5, fontWeight: 700, color: '#34d399', fontFamily: "'JetBrains Mono',monospace" }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6, background: 'rgba(52,211,153,.1)', border: '1px solid rgba(52,211,153,.18)', borderRadius: 999, padding: '3px 9px', fontSize: 10.5, fontWeight: 600, color: '#34d399', fontFamily: "'JetBrains Mono',monospace" }}>
                     <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#34d399', display: 'inline-block' }} />Conta ativa
                   </div>
                 </div>
-                <button onClick={() => setModalOpen(false)} style={{ background: 'rgba(255,255,255,.06)', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'rgba(244,242,248,.5)', flexShrink: 0 }}>
+                <button onClick={() => setModalOpen(false)} className="btn-close">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
                 </button>
               </div>
@@ -609,10 +661,10 @@ export default function LandingPage() {
                     ].map(s => (
                       <div key={s.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid rgba(255,255,255,.07)', borderRadius: 12, padding: '13px 16px' }}>
                         <span style={{ fontSize: 13.5, color: 'rgba(244,242,248,.55)' }}>{s.label}</span>
-                        <span style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 800, fontSize: 18, color: s.color }}>{s.val}</span>
+                        <span style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 600, fontSize: 18, color: s.color }}>{s.val}</span>
                       </div>
                     ))}
-                    <Link href="/dashboard" onClick={() => setModalOpen(false)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: AC, color: '#0a0612', fontWeight: 800, fontSize: 14, padding: '13px', borderRadius: 12, textDecoration: 'none', marginTop: 4, boxShadow: `0 8px 24px color-mix(in srgb,${AC} 40%,transparent)` }}>
+                    <Link href="/dashboard" onClick={() => setModalOpen(false)} className="btn-modal-primary" style={{ marginTop: 4 }}>
                       Ir para o dashboard <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
                     </Link>
                   </div>
@@ -628,10 +680,10 @@ export default function LandingPage() {
                     {[['Tipo de proxy','Residencial Rotativa'],['GB ativo','0 GB'],['Validade','Não expira'],['Região padrão','Brasil']].map(([k,v]) => (
                       <div key={k} style={{ display: 'flex', justifyContent: 'space-between', border: '1px solid rgba(255,255,255,.07)', borderRadius: 11, padding: '12px 16px', fontSize: 13.5 }}>
                         <span style={{ color: 'rgba(244,242,248,.5)' }}>{k}</span>
-                        <span style={{ fontWeight: 700, color: '#f4f2f8' }}>{v}</span>
+                        <span style={{ fontWeight: 600, color: '#f4f2f8' }}>{v}</span>
                       </div>
                     ))}
-                    <Link href="/dashboard/recarga" onClick={() => setModalOpen(false)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: AC, color: '#0a0612', fontWeight: 800, fontSize: 14, padding: '13px', borderRadius: 12, textDecoration: 'none', boxShadow: `0 8px 24px color-mix(in srgb,${AC} 40%,transparent)` }}>
+                    <Link href="/dashboard/recarga" onClick={() => setModalOpen(false)} className="btn-modal-primary">
                       Recarregar saldo <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
                     </Link>
                   </div>
@@ -644,7 +696,7 @@ export default function LandingPage() {
                         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 2 }}>
                           <input autoFocus defaultValue={name} onChange={e => setNewName(e.target.value)}
                             style={{ flex: 1, background: 'rgba(255,255,255,.05)', border: `1px solid color-mix(in srgb,${AC} 40%,transparent)`, borderRadius: 8, padding: '8px 11px', color: '#f4f2f8', fontSize: 14, outline: 'none', fontFamily: "'Manrope',sans-serif" }} />
-                          <button onClick={saveName} disabled={nameSaving} style={{ background: AC, color: '#0a0612', fontWeight: 700, fontSize: 12.5, padding: '8px 13px', borderRadius: 8, border: 'none', cursor: 'pointer' }}>{nameSaving ? '...' : 'Salvar'}</button>
+                          <button onClick={saveName} disabled={nameSaving} style={{ background: AC, color: '#0a0612', fontWeight: 600, fontSize: 12.5, padding: '8px 13px', borderRadius: 8, border: 'none', cursor: 'pointer' }}>{nameSaving ? '...' : 'Salvar'}</button>
                           <button onClick={() => setEditName(false)} style={{ background: 'rgba(255,255,255,.06)', color: 'rgba(244,242,248,.6)', fontSize: 12.5, padding: '8px 11px', borderRadius: 8, border: 'none', cursor: 'pointer' }}>×</button>
                         </div>
                       ) : (
@@ -665,7 +717,7 @@ export default function LandingPage() {
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                           <span style={{ fontSize: 15, color: 'rgba(244,242,248,.35)', letterSpacing: 4 }}>••••••••</span>
-                          <button onClick={() => setShowPwd(s => !s)} style={{ background: 'none', border: '1px solid rgba(255,255,255,.1)', borderRadius: 7, padding: '5px 11px', color: 'rgba(244,242,248,.65)', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: "'JetBrains Mono',monospace", letterSpacing: '.08em' }}>
+                          <button onClick={() => setShowPwd(s => !s)} style={{ background: 'none', border: '1px solid rgba(255,255,255,.1)', borderRadius: 7, padding: '5px 11px', color: 'rgba(244,242,248,.65)', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: "'JetBrains Mono',monospace", letterSpacing: '.08em' }}>
                             {showPwd ? 'CANCELAR' : 'ALTERAR'}
                           </button>
                         </div>
@@ -676,7 +728,7 @@ export default function LandingPage() {
                             <input type="password" placeholder="Nova senha (mín. 6 caracteres)" value={nxtPwd} onChange={e => setNxtPwd(e.target.value)}
                               style={{ background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.1)', borderRadius: 8, padding: '9px 12px', color: '#f4f2f8', fontSize: 13.5, outline: 'none', fontFamily: "'Manrope',sans-serif" }} />
                             <button onClick={savePassword} disabled={pwdSaving || !curPwd || nxtPwd.length < 6}
-                              style={{ background: AC, color: '#0a0612', fontWeight: 800, fontSize: 13.5, padding: '10px', borderRadius: 9, border: 'none', cursor: 'pointer', opacity: (pwdSaving || !curPwd || nxtPwd.length < 6) ? .5 : 1 }}>
+                              style={{ background: AC, color: '#0a0612', fontWeight: 600, fontSize: 13.5, padding: '10px', borderRadius: 9, border: 'none', cursor: 'pointer', opacity: (pwdSaving || !curPwd || nxtPwd.length < 6) ? .5 : 1 }}>
                               {pwdSaving ? 'Salvando...' : 'Confirmar'}
                             </button>
                             {pwdMsg && <div style={{ fontSize: 12, color: pwdMsg.ok ? '#34d399' : '#f87171' }}>{pwdMsg.text}</div>}
@@ -687,7 +739,7 @@ export default function LandingPage() {
 
                     <div style={{ height: 1, background: 'rgba(255,255,255,.06)', margin: '4px 0' }} />
 
-                    <button onClick={handleSignOut} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', color: '#f87171', fontSize: 13.5, fontWeight: 700, padding: '2px 0', fontFamily: "'Manrope',sans-serif" }}>
+                    <button onClick={handleSignOut} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', color: '#f87171', fontSize: 13.5, fontWeight: 600, padding: '2px 0', fontFamily: "'Manrope',sans-serif" }}>
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
                       Sair da conta
                     </button>

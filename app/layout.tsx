@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import { Cursor } from '@/components/Cursor'
 
 export const metadata: Metadata = {
   title: 'Luma Proxies — Proxies Premium Residencial',
@@ -23,7 +24,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         ['--font-archivo' as string]: 'Archivo, sans-serif',
         ['--font-manrope' as string]: 'Manrope, sans-serif',
         ['--font-mono' as string]: '"JetBrains Mono", monospace',
-      }}>{children}</body>
+      }}><Cursor />{children}</body>
     </html>
   )
 }

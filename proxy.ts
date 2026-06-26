@@ -6,7 +6,7 @@ const JWKS = createRemoteJWKSet(
   new URL('https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com')
 )
 
-const PUBLIC_PATHS = ['/', '/login', '/cadastro', '/verificar', '/api/webhook', '/api/auth']
+const PUBLIC_PATHS = ['/', '/login', '/cadastro', '/verificar', '/api/webhook', '/api/auth', '/api/pagamento/webhook', '/proxy-checker']
 const ADMIN_PREFIX = '/admin'
 
 async function proxy(req: NextRequest) {
