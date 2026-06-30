@@ -25,9 +25,13 @@ function parseError(e: AuthError): string {
 
 export async function signIn(email: string, password: string) {
   try {
-    const cred = await signInWithEmailAndPassword(auth, email, password)
+    const cred  = await signInWithEmailAndPassword(auth, email, password)
     const token = await cred.user.getIdToken()
-    document.cookie = `__session=${token}; path=/; max-age=3600; SameSite=Strict`
+    await fetch('/api/auth/session', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ token }),
+    })
     return { user: cred.user, error: null }
   } catch (e) {
     return { user: null, error: parseError(e as AuthError) }
@@ -47,7 +51,11 @@ export async function signUp(email: string, password: string, name: string) {
     await updateProfile(cred.user, { displayName: name })
 
     const token = await cred.user.getIdToken()
-    document.cookie = `__session=${token}; path=/; max-age=3600; SameSite=Strict`
+    await fetch('/api/auth/session', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ token }),
+    })
 
     const vRes = await fetch('/api/auth/send-verification', {
       method: 'POST',
@@ -68,5 +76,5 @@ export async function signUp(email: string, password: string, name: string) {
 
 export async function signOut() {
   await firebaseSignOut(auth)
-  document.cookie = '__session=; path=/; max-age=0'
+  await fetch('/api/auth/session', { method: 'DELETE' })
 }

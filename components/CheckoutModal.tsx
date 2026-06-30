@@ -9,7 +9,6 @@ const AC  = '#a855f7'
 const AC2 = 'color-mix(in srgb,#a855f7 45%,#ffffff)'
 
 const PLANS = [
-  { gb: '1',  price: 6.50,   label: '1 GB',  perGb: 6.50  },
   { gb: '3',  price: 18.90,  label: '3 GB',  perGb: 6.30  },
   { gb: '5',  price: 31.90,  label: '5 GB',  perGb: 6.38  },
   { gb: '10', price: 60.90,  label: '10 GB', perGb: 6.09  },
@@ -44,12 +43,12 @@ const LABEL: React.CSSProperties = {
 }
 
 interface Props {
-  initialPlan: string
+  initialPlan?: string
   user: User | null | undefined
   onClose: () => void
 }
 
-export function CheckoutModal({ initialPlan, user, onClose }: Props) {
+export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
   const planIdx = PLANS.findIndex(p => p.gb === initialPlan)
   const [idx, setIdx]       = useState(planIdx >= 0 ? planIdx : 2)
   const [method, setMethod] = useState<'pix' | 'crypto'>('pix')
@@ -132,13 +131,17 @@ export function CheckoutModal({ initialPlan, user, onClose }: Props) {
     setCouponError(null)
     if (!code) return
     if (code !== 'LUMA10') { setCouponError('Cupom inválido.'); return }
-    if (couponEligible === null) {
-      setCouponLoading(true)
-      try { const d = await fetch('/api/coupon/status').then(r => r.json()); setCouponEligible(d.eligible) }
-      catch { /* real guard at payment */ }
-      finally { setCouponLoading(false) }
+    setCouponLoading(true)
+    try {
+      const d = await fetch('/api/coupon/status').then(r => r.json()) as { eligible: boolean }
+      setCouponEligible(d.eligible)
+      if (!d.eligible) { setCouponError('Cupom já utilizado ou não disponível para sua conta.'); return }
+      setCouponApplied('LUMA10')
+    } catch {
+      setCouponError('Erro ao verificar cupom. Tente novamente.')
+    } finally {
+      setCouponLoading(false)
     }
-    setCouponApplied('LUMA10')
   }
 
   async function handleCopyPix() {
@@ -153,37 +156,36 @@ export function CheckoutModal({ initialPlan, user, onClose }: Props) {
     setPayError(null)
     setLoading(true)
     try {
-      if (couponApplied === 'LUMA10') {
-        const res = await fetch('/api/coupon/use', { method: 'POST' })
-        if (!res.ok) {
-          const d = await res.json() as { error?: string }
-          setPayError(d.error ?? 'Erro ao aplicar cupom.')
-          return
-        }
-        setCouponApplied(null); setCouponEligible(false)
-      }
-
       const res = await fetch('/api/pagamento/pix', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          amount:     total,
-          gb:         Number(plan.gb),
-          plan_label: plan.label,
+          gb:       Number(plan.gb),
           cpf,
-          whatsapp:   whatsapp.trim() || null,
-          coupon:     couponApplied,
+          whatsapp: whatsapp.trim() || null,
+          coupon:   couponApplied,
         }),
       })
-      const data = await res.json() as { pix_code?: string; identifier?: string; error?: string }
-      if (!res.ok) {
-        setPayError(data.error ?? 'Erro ao gerar PIX.')
+
+      let data: { pix_code?: string; identifier?: string; error?: string } = {}
+      try {
+        data = await res.json()
+      } catch {
+        setPayError(`Erro ${res.status}: resposta inesperada do servidor.`)
         return
       }
+
+      if (!res.ok) {
+        setPayError(data.error ?? `Erro ${res.status} ao gerar PIX.`)
+        return
+      }
+
       setPixCode(data.pix_code ?? '')
       setPixId(data.identifier ?? '')
       setPixStatus('pending')
       setStep('pix')
+    } catch (e) {
+      setPayError(e instanceof Error ? e.message : 'Erro inesperado. Tente novamente.')
     } finally {
       setLoading(false)
     }
@@ -194,7 +196,7 @@ export function CheckoutModal({ initialPlan, user, onClose }: Props) {
     : pixStatus === 'completed' ? 'Pagamento confirmado'
     : 'Aguardando PIX'
 
-  const headerSub = step === 'form' ? 'Proxy Residencial Rotativa · GB nunca expira'
+  const headerSub = step === 'form' ? 'Proxy Residencial Rotativa'
     : step === 'summary' ? `${plan.label} · ${method === 'pix' ? 'PIX' : 'Criptomoeda'}`
     : `${plan.label} · ${fmt(total)}`
 
@@ -210,19 +212,21 @@ export function CheckoutModal({ initialPlan, user, onClose }: Props) {
         animation: 'lumaRise .18s ease both',
       }}
     >
+      <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 540, maxHeight: '92vh', display: 'flex', flexDirection: 'column' }}>
       <div
-        onClick={e => e.stopPropagation()}
+        className="checkout-modal-box"
         style={{
-          width: '100%', maxWidth: 540,
+          width: '100%',
           background: '#0f0d18',
           border: '1px solid rgba(255,255,255,.1)',
           borderRadius: 22,
           boxShadow: '0 40px 100px rgba(0,0,0,.85), 0 0 0 1px rgba(168,85,247,.12)',
-          overflow: 'hidden',
           maxHeight: '92vh',
           display: 'flex', flexDirection: 'column',
+          overflow: 'hidden',
         }}
       >
+
         {/* HEADER */}
         <div style={{
           padding: '20px 24px 16px',
@@ -237,17 +241,18 @@ export function CheckoutModal({ initialPlan, user, onClose }: Props) {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
             </button>
           )}
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 800, fontSize: 18, color: '#f4f2f8' }}>
               {headerTitle}
             </div>
-            <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, letterSpacing: '.14em', color: 'rgba(244,242,248,.3)', textTransform: 'uppercase', marginTop: 3 }}>
+            <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, letterSpacing: '.1em', color: 'rgba(244,242,248,.3)', textTransform: 'uppercase', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {headerSub}
             </div>
           </div>
+          {/* X button — dentro do header, sem problema de clipping */}
           <button
             onClick={onClose}
-            style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(255,255,255,.06)', border: 'none', cursor: 'pointer', color: 'rgba(244,242,248,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+            style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(255,255,255,.06)', border: 'none', cursor: 'pointer', color: 'rgba(244,242,248,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
           </button>
@@ -275,10 +280,10 @@ export function CheckoutModal({ initialPlan, user, onClose }: Props) {
                     Crie uma conta grátis ou entre para finalizar a compra do plano <b style={{ color: '#fff' }}>{plan.label}</b>.
                   </p>
                   <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-                    <Link href={`/cadastro?redirect=${encodeURIComponent(`/checkout?plan=${plan.gb}`)}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: AC, color: '#ffffff', fontWeight: 800, fontSize: 14, padding: '11px 20px', borderRadius: 11, textDecoration: 'none', boxShadow: `0 8px 24px color-mix(in srgb,${AC} 44%,transparent)` }}>
+                    <Link href={`/cadastro?redirect=${encodeURIComponent(`/?checkout=${plan.gb}`)}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: AC, color: '#ffffff', fontWeight: 800, fontSize: 14, padding: '11px 20px', borderRadius: 11, textDecoration: 'none', boxShadow: `0 8px 24px color-mix(in srgb,${AC} 44%,transparent)` }}>
                       Criar conta grátis
                     </Link>
-                    <Link href={`/login?redirect=${encodeURIComponent(`/checkout?plan=${plan.gb}`)}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.1)', color: '#f4f2f8', fontWeight: 700, fontSize: 14, padding: '11px 18px', borderRadius: 11, textDecoration: 'none' }}>
+                    <Link href={`/login?redirect=${encodeURIComponent(`/?checkout=${plan.gb}`)}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.1)', color: '#f4f2f8', fontWeight: 700, fontSize: 14, padding: '11px 18px', borderRadius: 11, textDecoration: 'none' }}>
                       Entrar
                     </Link>
                   </div>
@@ -288,7 +293,7 @@ export function CheckoutModal({ initialPlan, user, onClose }: Props) {
               {/* Plan selector */}
               <div>
                 <div style={LABEL}>Selecione o plano</div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 8 }}>
+                <div className="checkout-plan-grid">
                   {PLANS.map((p, i) => {
                     const active     = i === idx
                     const hasDisc    = !!couponApplied
@@ -380,12 +385,12 @@ export function CheckoutModal({ initialPlan, user, onClose }: Props) {
               {loggedIn && (
                 <div>
                   <div style={LABEL}>Método de pagamento</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
                     {([
                       { key: 'pix' as const, label: 'PIX', sub: 'Ativação em ~30s',
-                        icon: <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/></svg> },
+                        icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/></svg> },
                       { key: 'crypto' as const, label: 'Criptomoeda', sub: 'BTC · ETH · USDT',
-                        icon: <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11.767 19.089c4.924.868 6.14-6.025 1.216-6.894m-1.216 6.894L5.86 18.047m5.908 1.042-.347 1.97m1.563-8.864c4.924.869 6.14-6.025 1.215-6.893m-1.215 6.893-3.94-.694m5.155-6.2L8.29 4.26m5.908 1.042.348-1.97M7.48 20.364l3.126-17.727"/></svg> },
+                        icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11.767 19.089c4.924.868 6.14-6.025 1.216-6.894m-1.216 6.894L5.86 18.047m5.908 1.042-.347 1.97m1.563-8.864c4.924.869 6.14-6.025 1.215-6.893m-1.215 6.893-3.94-.694m5.155-6.2L8.29 4.26m5.908 1.042.348-1.97M7.48 20.364l3.126-17.727"/></svg> },
                     ] as const).map(m => {
                       const isCrypto = m.key === 'crypto'
                       return (
@@ -393,23 +398,25 @@ export function CheckoutModal({ initialPlan, user, onClose }: Props) {
                           key={m.key}
                           onClick={() => !isCrypto && setMethod(m.key)}
                           style={{
+                            flex: '1 1 140px',
                             border: method === m.key ? `1.5px solid ${AC}` : '1px solid rgba(255,255,255,.09)',
                             background: method === m.key ? `color-mix(in srgb,${AC} 10%,transparent)` : 'rgba(255,255,255,.02)',
-                            borderRadius: 12, padding: '14px 16px',
+                            borderRadius: 12, padding: '12px 14px',
                             cursor: isCrypto ? 'not-allowed' : 'pointer',
-                            display: 'flex', alignItems: 'center', gap: 12,
+                            display: 'flex', alignItems: 'center', gap: 10,
                             boxShadow: method === m.key ? `0 4px 16px color-mix(in srgb,${AC} 16%,transparent)` : 'none',
                             transition: 'all .12s',
                             opacity: isCrypto ? 0.4 : 1,
+                            minWidth: 0,
                           }}
                         >
-                          <span style={{ color: method === m.key ? AC2 : 'rgba(244,242,248,.35)' }}>{m.icon}</span>
-                          <div style={{ textAlign: 'left' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                              <span style={{ fontWeight: 600, fontSize: 14, color: '#f4f2f8' }}>{m.label}</span>
-                              {isCrypto && <span style={{ fontSize: 8, letterSpacing: '.1em', background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.18)', borderRadius: 999, padding: '2px 6px', color: 'rgba(244,242,248,.7)', fontWeight: 600 }}>EM BREVE</span>}
+                          <span style={{ color: method === m.key ? AC2 : 'rgba(244,242,248,.35)', flexShrink: 0 }}>{m.icon}</span>
+                          <div style={{ textAlign: 'left', minWidth: 0, flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+                              <span style={{ fontWeight: 600, fontSize: 13, color: '#f4f2f8', whiteSpace: 'nowrap' }}>{m.label}</span>
+                              {isCrypto && <span style={{ fontSize: 8, letterSpacing: '.1em', background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.18)', borderRadius: 999, padding: '2px 6px', color: 'rgba(244,242,248,.7)', fontWeight: 600, flexShrink: 0 }}>EM BREVE</span>}
                             </div>
-                            <div style={{ fontSize: 12, color: 'rgba(244,242,248,.38)', marginTop: 2 }}>{m.sub}</div>
+                            <div style={{ fontSize: 11, color: 'rgba(244,242,248,.38)', marginTop: 2, whiteSpace: 'nowrap' }}>{m.sub}</div>
                           </div>
                           {method === m.key && (
                             <span style={{ marginLeft: 'auto', width: 18, height: 18, borderRadius: '50%', background: AC, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -427,33 +434,39 @@ export function CheckoutModal({ initialPlan, user, onClose }: Props) {
               {loggedIn && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      value={cpf}
-                      onChange={e => setCpf(maskCpf(e.target.value))}
-                      placeholder="CPF"
-                      style={{
-                        background: 'rgba(255,255,255,.04)',
-                        border: `1px solid ${cpf && !cpfValid ? 'rgba(248,113,113,.4)' : 'rgba(255,255,255,.1)'}`,
-                        borderRadius: 11, padding: '13px 16px', color: '#f4f2f8', fontSize: 14,
-                        fontFamily: "'JetBrains Mono',monospace", letterSpacing: '.06em', outline: 'none',
-                        transition: 'border-color .12s', width: '100%', boxSizing: 'border-box',
-                      }}
-                    />
-                    <input
-                      type="tel"
-                      value={whatsapp}
-                      onChange={e => setWhatsapp(e.target.value.replace(/\D/g, '').slice(0, 11))}
-                      placeholder="WhatsApp"
-                      style={{
-                        background: 'rgba(255,255,255,.04)',
-                        border: '1px solid rgba(255,255,255,.1)',
-                        borderRadius: 11, padding: '13px 16px', color: '#f4f2f8', fontSize: 14,
-                        fontFamily: "'JetBrains Mono',monospace", letterSpacing: '.04em', outline: 'none',
-                        width: '100%', boxSizing: 'border-box',
-                      }}
-                    />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(244,242,248,.4)', fontFamily: "'JetBrains Mono',monospace" }}>CPF</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={cpf}
+                        onChange={e => setCpf(maskCpf(e.target.value))}
+                        placeholder="000.000.000-00"
+                        style={{
+                          background: 'rgba(255,255,255,.04)',
+                          border: `1px solid ${cpf && !cpfValid ? 'rgba(248,113,113,.4)' : 'rgba(255,255,255,.1)'}`,
+                          borderRadius: 11, padding: '13px 16px', color: '#f4f2f8', fontSize: 14,
+                          fontFamily: "'JetBrains Mono',monospace", letterSpacing: '.06em', outline: 'none',
+                          transition: 'border-color .12s', width: '100%', boxSizing: 'border-box',
+                        }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(244,242,248,.4)', fontFamily: "'JetBrains Mono',monospace" }}>Telefone</label>
+                      <input
+                        type="tel"
+                        value={whatsapp}
+                        onChange={e => setWhatsapp(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                        placeholder="(00) 00000-0000"
+                        style={{
+                          background: 'rgba(255,255,255,.04)',
+                          border: '1px solid rgba(255,255,255,.1)',
+                          borderRadius: 11, padding: '13px 16px', color: '#f4f2f8', fontSize: 14,
+                          fontFamily: "'JetBrains Mono',monospace", letterSpacing: '.04em', outline: 'none',
+                          width: '100%', boxSizing: 'border-box',
+                        }}
+                      />
+                    </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'rgba(244,242,248,.3)' }}>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
@@ -718,6 +731,7 @@ export function CheckoutModal({ initialPlan, user, onClose }: Props) {
             )}
           </div>
         )}
+      </div>
       </div>
     </div>
   )

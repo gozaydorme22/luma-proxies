@@ -11,7 +11,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from('orders')
-    .select('id,quantity,total_brl,status,payment_method,paid_at,created_at,products(name,type,unit)')
+    .select('id,quantity,total_brl,status,payment_method,paid_at,created_at')
     .eq('client_id', uid)
     .order('created_at', { ascending: false })
 
@@ -19,9 +19,9 @@ export async function GET() {
 
   const orders = (data ?? []).map((o: any) => ({
     id:          o.id,
-    productName: o.products?.name ?? 'Produto',
-    productType: o.products?.type ?? 'residencial',
-    unit:        o.products?.unit ?? 'gb',
+    productName: 'Proxy Residencial Rotativa',
+    productType: 'residencial',
+    unit:        'gb',
     quantity:    o.quantity,
     totalBrl:    o.total_brl,
     status:      o.status as string,

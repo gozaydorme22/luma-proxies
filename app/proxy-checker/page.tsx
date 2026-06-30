@@ -129,7 +129,7 @@ export default function ProxyCheckerPage() {
         {/* Input panel */}
         <div style={{ border: '1px solid rgba(255,255,255,.08)', background: 'rgba(255,255,255,.02)', borderRadius: 18, padding: '22px 24px 24px' }}>
           <label style={{ display: 'block', fontFamily: "'JetBrains Mono',monospace", fontSize: 10.5, letterSpacing: '.14em', color: 'rgba(244,242,248,.4)', textTransform: 'uppercase', marginBottom: 12 }}>
-            Proxies <span style={{ color: 'rgba(244,242,248,.25)' }}>· máx. 50</span>
+            Proxys <span style={{ color: 'rgba(244,242,248,.25)' }}>· máx. 50</span>
           </label>
           <textarea
             value={input}

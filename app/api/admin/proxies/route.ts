@@ -19,7 +19,10 @@ export async function GET(req: NextRequest) {
     .select('*, clients(email, name)')
     .order('created_at', { ascending: true })
 
-  if (product_id) query = query.eq('product_id', product_id)
+  const assigned_to = searchParams.get('assigned_to')
+
+  if (product_id)  query = query.eq('product_id', product_id)
+  if (assigned_to) query = query.eq('assigned_to', assigned_to)
   if (status && status !== 'all') query = query.eq('status', status)
 
   const { data, error } = await query

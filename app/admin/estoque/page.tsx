@@ -44,6 +44,7 @@ export default function EstoquePage() {
   const [expanded, setExpanded]           = useState<Record<string, Proxy[] | null>>({})
   const [loadingProxies, setLoadingPx]    = useState<Record<string, boolean>>({})
   const [revealed, setRevealed]           = useState<Record<string, boolean>>({})
+  const [checkResults, setCheckResults]   = useState<Record<string, 'checking' | 'ok' | 'fail'>>({})
 
   // Modal: criar produto
   const [prodModal, setProdModal] = useState(false)
@@ -62,6 +63,32 @@ export default function EstoquePage() {
   const [pxForm, setPxForm]     = useState({ host: '', port: '823', username: '', password: '', notes: '' })
   const [pxSaving, setPxSaving] = useState(false)
   const [pxErr, setPxErr]       = useState('')
+  const [pxRaw, setPxRaw]       = useState('')
+
+  function parseProxyString(raw: string) {
+    const s = raw.trim()
+    if (!s) return
+    // Remove protocol prefix
+    const withoutProto = s.replace(/^https?:\/\//i, '').replace(/^socks[45][hH]?:\/\//i, '')
+    const atIdx = withoutProto.lastIndexOf('@')
+    if (atIdx !== -1) {
+      // user:pass@host:port
+      const auth     = withoutProto.slice(0, atIdx)
+      const hostPort = withoutProto.slice(atIdx + 1)
+      const ci       = auth.indexOf(':')
+      const user     = ci !== -1 ? auth.slice(0, ci) : auth
+      const pass     = ci !== -1 ? auth.slice(ci + 1) : ''
+      const [host, rawPort] = hostPort.replace(/\/.*$/, '').split(':')
+      const port = rawPort?.replace(/\D/g, '')
+      if (host && port) setPxForm(f => ({ ...f, host, port, username: user, password: pass }))
+    } else {
+      // host:port:user:pass
+      const parts = withoutProto.split(':')
+      if (parts.length === 4) {
+        setPxForm(f => ({ ...f, host: parts[0], port: parts[1], username: parts[2], password: parts[3] }))
+      }
+    }
+  }
 
   async function getToken() { return user?.getIdToken() }
 
@@ -188,6 +215,21 @@ export default function EstoquePage() {
     loadProducts()
   }
 
+  async function handleCheckProxy(px: Proxy) {
+    setCheckResults(r => ({ ...r, [px.id]: 'checking' }))
+    try {
+      const res = await fetch('/api/proxy-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ proxies: [`${px.host}:${px.port}:${px.username}:${px.password}`] }),
+      })
+      const results: Array<{ status: string }> = res.ok ? await res.json() : []
+      setCheckResults(r => ({ ...r, [px.id]: results[0]?.status === 'success' ? 'ok' : 'fail' }))
+    } catch {
+      setCheckResults(r => ({ ...r, [px.id]: 'fail' }))
+    }
+  }
+
   async function handleDeleteProxy(proxyId: string, productId: string) {
     if (!confirm('Remover essa proxy?')) return
     const token = await getToken()
@@ -276,7 +318,7 @@ export default function EstoquePage() {
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <button onClick={() => { setPxModal(prod.id); setPxErr(''); setPxForm(f => ({ ...f, host: '', username: '', password: '' })) }} style={{ fontSize: 12, fontWeight: 700, padding: '7px 14px', borderRadius: 8, border: `1px solid color-mix(in srgb,${AC} 40%,transparent)`, background: `color-mix(in srgb,${AC} 10%,transparent)`, color: AC2, cursor: 'pointer', fontFamily: "'Manrope',sans-serif", whiteSpace: 'nowrap' }}>
+                      <button onClick={() => { setPxModal(prod.id); setPxErr(''); setPxRaw(''); setPxForm({ host: '', port: '823', username: '', password: '', notes: '' }) }} style={{ fontSize: 12, fontWeight: 700, padding: '7px 14px', borderRadius: 8, border: `1px solid color-mix(in srgb,${AC} 40%,transparent)`, background: `color-mix(in srgb,${AC} 10%,transparent)`, color: AC2, cursor: 'pointer', fontFamily: "'Manrope',sans-serif", whiteSpace: 'nowrap' }}>
                         + Proxy
                       </button>
                       <button onClick={() => openEdit(prod)} style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid rgba(255,255,255,.12)', background: 'rgba(255,255,255,.05)', color: 'rgba(244,242,248,.6)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} title="Editar produto">
@@ -338,18 +380,30 @@ export default function EstoquePage() {
                                     </div>
                                   )}
                                 </div>
-                                <div style={{ display: 'flex', gap: 6 }}>
+                                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                  {/* Checker */}
+                                  {checkResults[px.id] === 'checking' ? (
+                                    <span style={{ fontSize: 11, color: 'rgba(244,242,248,.4)', fontFamily: "'JetBrains Mono',monospace" }}>...</span>
+                                  ) : checkResults[px.id] === 'ok' ? (
+                                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#34d399', boxShadow: '0 0 5px #34d399', display: 'inline-block', flexShrink: 0 }} title="Online" />
+                                  ) : checkResults[px.id] === 'fail' ? (
+                                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#f87171', boxShadow: '0 0 5px #f87171', display: 'inline-block', flexShrink: 0 }} title="Offline" />
+                                  ) : null}
+                                  <button
+                                    onClick={() => handleCheckProxy(px)}
+                                    disabled={checkResults[px.id] === 'checking'}
+                                    style={{ fontSize: 11, fontWeight: 700, padding: '5px 10px', borderRadius: 7, border: '1px solid rgba(168,85,247,.3)', background: 'rgba(168,85,247,.07)', color: AC2, cursor: 'pointer', fontFamily: "'Manrope',sans-serif", opacity: checkResults[px.id] === 'checking' ? .5 : 1 }}>
+                                    Verificar
+                                  </button>
                                   {px.status === 'available' && (
                                     <button onClick={() => handlePatchProxyStatus(px.id, 'suspended', prod.id)} style={{ fontSize: 11, fontWeight: 700, padding: '5px 10px', borderRadius: 7, border: '1px solid rgba(251,191,36,.3)', background: 'rgba(251,191,36,.07)', color: '#fbbf24', cursor: 'pointer', fontFamily: "'Manrope',sans-serif" }}>Pausar</button>
                                   )}
                                   {px.status === 'suspended' && (
                                     <button onClick={() => handlePatchProxyStatus(px.id, 'available', prod.id)} style={{ fontSize: 11, fontWeight: 700, padding: '5px 10px', borderRadius: 7, border: '1px solid rgba(52,211,153,.3)', background: 'rgba(52,211,153,.07)', color: '#34d399', cursor: 'pointer', fontFamily: "'Manrope',sans-serif" }}>Ativar</button>
                                   )}
-                                  {px.status !== 'sold' && (
-                                    <button onClick={() => handleDeleteProxy(px.id, prod.id)} style={{ width: 28, height: 28, borderRadius: 7, border: '1px solid rgba(248,113,113,.2)', background: 'rgba(248,113,113,.05)', color: '#f87171', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M9 6V4h6v2"/></svg>
-                                    </button>
-                                  )}
+                                  <button onClick={() => handleDeleteProxy(px.id, prod.id)} style={{ width: 28, height: 28, borderRadius: 7, border: '1px solid rgba(248,113,113,.2)', background: 'rgba(248,113,113,.05)', color: '#f87171', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M9 6V4h6v2"/></svg>
+                                  </button>
                                 </div>
                               </div>
                             )
@@ -431,6 +485,31 @@ export default function EstoquePage() {
               {products.find(p => p.id === pxModal)?.name}
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Campo colar link */}
+              <div>
+                <label style={lbl}>Colar link da proxy</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    style={{ ...inp, flex: 1, fontFamily: "'JetBrains Mono',monospace", fontSize: 12 }}
+                    placeholder="http://user:pass@host:port"
+                    value={pxRaw}
+                    onChange={e => { setPxRaw(e.target.value); parseProxyString(e.target.value) }}
+                    onPaste={e => {
+                      const text = e.clipboardData.getData('text')
+                      setPxRaw(text)
+                      parseProxyString(text)
+                      e.preventDefault()
+                    }}
+                  />
+                  {pxRaw && (
+                    <button onClick={() => { setPxRaw(''); setPxForm(f => ({ ...f, host: '', port: '823', username: '', password: '' })) }}
+                      style={{ background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.1)', borderRadius: 10, padding: '0 12px', color: 'rgba(244,242,248,.5)', cursor: 'pointer', fontSize: 13, fontFamily: "'Manrope',sans-serif" }}>
+                      ×
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div style={{ height: 1, background: 'rgba(255,255,255,.06)' }} />
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px', gap: 12 }}>
                 <div>
                   <label style={lbl}>Host</label>

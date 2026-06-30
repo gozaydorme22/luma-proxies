@@ -7,6 +7,12 @@ import { useAuth } from '@/lib/hooks/useAuth'
 const AC  = '#a855f7'
 const AC2 = 'color-mix(in srgb,#a855f7 45%,#ffffff)'
 
+function AnimBar({ pct, color }: { pct: number; color: string }) {
+  const [w, setW] = useState(0)
+  useEffect(() => { const id = requestAnimationFrame(() => setW(pct)); return () => cancelAnimationFrame(id) }, [pct])
+  return <div style={{ height: '100%', width: `${w}%`, borderRadius: 6, background: `linear-gradient(90deg,${AC},${color})`, transition: 'width .9s cubic-bezier(.4,0,.2,1)' }} />
+}
+
 interface Proxy {
   id: string; name: string; proxyUser: string | null; proxyPass: string | null
   type: string; status: 'ativa' | 'inativa'; host: string | null; port: number | null
@@ -50,10 +56,15 @@ const iconBtn: React.CSSProperties = {
   alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: AC2, flexShrink: 0,
 }
 
+type Range = '24h' | '7d' | '14d'
+
 export default function ProxiesPage() {
   const { user } = useAuth()
   const [proxies, setProxies]       = useState<Proxy[]>([])
   const [usage14d, setUsage14d]     = useState<number[]>(new Array(14).fill(0))
+  const [usage7d,  setUsage7d]      = useState<number[]>(new Array(7).fill(0))
+  const [usage24h, setUsage24h]     = useState<number[]>(new Array(24).fill(0))
+  const [range,    setRange]        = useState<Range>('14d')
   const [totalRemGb, setTotalRemGb] = useState(0)
   const [tier, setTier]             = useState('Bronze')
   const [loading, setLoading]       = useState(true)
@@ -67,6 +78,8 @@ export default function ProxiesPage() {
       .then(d => {
         setProxies(d.proxies ?? [])
         setUsage14d(d.usage14d ?? new Array(14).fill(0))
+        setUsage7d(d.usage7d   ?? new Array(7).fill(0))
+        setUsage24h(d.usage24h ?? new Array(24).fill(0))
         setTotalRemGb(d.totalRemainingGb ?? 0)
         setTier(capitalize(d.client?.tier ?? 'bronze'))
       })
@@ -82,40 +95,52 @@ export default function ProxiesPage() {
     .filter(p => filter === 'all' || p.status === filter)
     .filter(p => !search || p.name.toLowerCase().includes(search.toLowerCase()) || (p.proxyUser ?? '').toLowerCase().includes(search.toLowerCase()))
 
-  const chart  = buildChart(usage14d, 720, 200, 18)
-  const sumMb  = usage14d.reduce((a, b) => a + b, 0)
-  const ativas = proxies.filter(p => p.status === 'ativa').length
+  const activeData = range === '24h' ? usage24h : range === '7d' ? usage7d : usage14d
+  const chart      = buildChart(activeData, 720, 200, 18)
+  const sumGb      = activeData.reduce((a, b) => a + b, 0)
+  const ativas     = proxies.filter(p => p.status === 'ativa').length
+
+  const rangeLabel: Record<Range, string> = {
+    '24h': 'últimas 24 horas',
+    '7d':  'últimos 7 dias',
+    '14d': 'últimos 14 dias',
+  }
+  const xLabels: Record<Range, string[]> = {
+    '24h': ['24h atrás', '18h', '12h', '6h', 'agora'],
+    '7d':  ['7d atrás', '5d', '3d', '1d', 'hoje'],
+    '14d': ['14d atrás', '10d', '6d', '2d', 'hoje'],
+  }
 
   return (
     <div style={{ animation: 'lumaRise .4s ease both' }}>
-      <h1 style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 900, fontSize: 34, letterSpacing: '-.02em', margin: 0 }}>
+      <h1 style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 600, fontSize: 22, letterSpacing: '-.01em', margin: 0 }}>
         {greeting}, <span style={{ color: AC }}>{firstName}</span>
       </h1>
-      <p style={{ fontSize: 15, color: 'rgba(244,242,248,.55)', margin: '8px 0 0' }}>Bem-vindo de volta. Aqui está o resumo das suas proxies.</p>
+      <p style={{ fontSize: 13, color: 'rgba(244,242,248,.45)', margin: '5px 0 0' }}>Bem-vindo de volta. Aqui está o resumo das suas proxies.</p>
 
       {/* STAT CARDS */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 14, marginTop: 26 }}>
-        <StatCard label="Proxies"     value={loading ? '–' : String(proxies.length)} icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={AC2} strokeWidth="2"><rect x="3" y="4" width="18" height="6" rx="1"/><rect x="3" y="14" width="18" height="6" rx="1"/></svg>} />
-        <StatCard label="Ativas"      value={loading ? '–' : String(ativas)} valueColor="#34d399" icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2"><path d="M5 13a10 10 0 0 1 14 0M8.5 16.5a5 5 0 0 1 7 0M12 20h.01"/></svg>} />
-        <StatCard label="Inativas"    value={loading ? '–' : String(proxies.length - ativas)} valueColor="rgba(244,242,248,.5)" icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(244,242,248,.5)" strokeWidth="2"><path d="M2 2l20 20M8.5 16.5a5 5 0 0 1 6-.8"/></svg>} />
-        <StatCard label="Saldo total" value={loading ? '–' : fmtGb(totalRemGb)} icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={AC2} strokeWidth="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/></svg>} />
-        <StatCard label="Tier" value={loading ? '–' : tier} valueColor={AC2} highlight icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={AC2} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9a6 6 0 0 0 12 0V3H6Z"/><path d="M6 5H3v2a3 3 0 0 0 3 3M18 5h3v2a3 3 0 0 1-3 3M9 21h6M12 15v6"/></svg>} />
+      <div className="dash-stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 14, marginTop: 26 }}>
+        <StatCard loading={loading} label="Proxys"     value={String(proxies.length)} icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={AC2} strokeWidth="2"><rect x="3" y="4" width="18" height="6" rx="1"/><rect x="3" y="14" width="18" height="6" rx="1"/></svg>} />
+        <StatCard loading={loading} label="Ativas"      value={String(ativas)} valueColor="#34d399" icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2"><path d="M5 13a10 10 0 0 1 14 0M8.5 16.5a5 5 0 0 1 7 0M12 20h.01"/></svg>} />
+        <StatCard loading={loading} label="Inativas"    value={String(proxies.length - ativas)} valueColor="rgba(244,242,248,.5)" icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(244,242,248,.5)" strokeWidth="2"><path d="M2 2l20 20M8.5 16.5a5 5 0 0 1 6-.8"/></svg>} />
+        <StatCard loading={loading} label="Saldo total" value={fmtGb(totalRemGb)} icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={AC2} strokeWidth="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/></svg>} />
+        <StatCard loading={loading} label="Tier" value={tier} valueColor={AC2} highlight icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={AC2} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9a6 6 0 0 0 12 0V3H6Z"/><path d="M6 5H3v2a3 3 0 0 0 3 3M18 5h3v2a3 3 0 0 1-3 3M9 21h6M12 15v6"/></svg>} />
       </div>
 
       {/* CHART */}
-      <div style={{ border: '1px solid rgba(255,255,255,.08)', background: 'rgba(255,255,255,.02)', borderRadius: 18, padding: '22px 24px', marginTop: 16 }}>
+      <div className="dash-section" style={{ border: '1px solid rgba(255,255,255,.08)', background: 'rgba(255,255,255,.02)', borderRadius: 18, padding: '22px 24px', marginTop: 16 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
           <div>
-            <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, letterSpacing: '.14em', color: 'rgba(244,242,248,.45)', textTransform: 'uppercase' }}>Consumo de dados · últimos 14 dias</div>
+            <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, letterSpacing: '.14em', color: 'rgba(244,242,248,.45)', textTransform: 'uppercase' }}>Consumo de dados · {rangeLabel[range]}</div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 8 }}>
-              <span style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 900, fontSize: 30 }}>{fmtGb(sumMb)}</span>
-              <span style={{ fontSize: 13, color: '#34d399', fontWeight: 700 }}>▲ consumidos no período</span>
+              <span style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 500, fontSize: 20 }}>{fmtGb(sumGb)}</span>
+              <span style={{ fontSize: 12, color: '#34d399', fontWeight: 500 }}>▲ consumidos no período</span>
             </div>
           </div>
           <div style={{ display: 'flex', gap: 6, border: '1px solid rgba(255,255,255,.08)', borderRadius: 10, padding: 4 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#0a0612', background: AC, padding: '6px 12px', borderRadius: 7 }}>14d</span>
-            <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(244,242,248,.5)', padding: '6px 12px' }}>30d</span>
-            <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(244,242,248,.5)', padding: '6px 12px' }}>90d</span>
+            {(['24h', '7d', '14d'] as Range[]).map(r => (
+              <button key={r} onClick={() => setRange(r)} style={{ fontSize: 12, fontWeight: r === range ? 700 : 600, color: r === range ? '#0a0612' : 'rgba(244,242,248,.5)', background: r === range ? AC : 'transparent', padding: '6px 12px', borderRadius: 7, border: 'none', cursor: 'pointer', fontFamily: "'Manrope',sans-serif" }}>{r}</button>
+            ))}
           </div>
         </div>
         <div style={{ marginTop: 18 }}>
@@ -133,7 +158,7 @@ export default function ProxiesPage() {
             {chart.line && <path d={chart.line} fill="none" stroke={AC2} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="1400" style={{ animation: 'lumaDraw 1.4s ease both' }}/>}
           </svg>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontFamily: "'JetBrains Mono',monospace", fontSize: 9.5, color: 'rgba(244,242,248,.35)' }}>
-            <span>14d atrás</span><span>10d</span><span>6d</span><span>2d</span><span>hoje</span>
+            {xLabels[range].map(l => <span key={l}>{l}</span>)}
           </div>
         </div>
       </div>
@@ -141,10 +166,10 @@ export default function ProxiesPage() {
       {/* HEADER */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginTop: 30 }}>
         <div>
-          <h2 style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 800, fontSize: 22, margin: 0 }}>Minhas Proxies</h2>
-          <p style={{ fontSize: 13.5, color: 'rgba(244,242,248,.5)', margin: '5px 0 0' }}>Gerencie suas proxies residenciais</p>
+          <h2 style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 600, fontSize: 16, margin: 0 }}>Minhas Proxys</h2>
+          <p style={{ fontSize: 13, color: 'rgba(244,242,248,.45)', margin: '4px 0 0' }}>Gerencie suas proxies residenciais</p>
         </div>
-        <Link href="/dashboard/recarga" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: AC, color: '#0a0612', fontWeight: 800, fontSize: 13.5, padding: '11px 18px', borderRadius: 11, textDecoration: 'none', boxShadow: `0 8px 24px color-mix(in srgb,${AC} 40%,transparent)` }}>
+        <Link href="?checkout=1" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: AC, color: '#0a0612', fontWeight: 800, fontSize: 13.5, padding: '11px 18px', borderRadius: 11, textDecoration: 'none', boxShadow: `0 8px 24px color-mix(in srgb,${AC} 40%,transparent)` }}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>Adicionar Proxy
         </Link>
       </div>
@@ -164,20 +189,38 @@ export default function ProxiesPage() {
 
       {/* PROXY CARDS */}
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '60px 0', color: 'rgba(244,242,248,.3)', fontSize: 14 }}>Carregando proxies...</div>
+        <div className="dash-proxy-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 16, marginTop: 18 }}>
+          {[0, 1].map(i => (
+            <div key={i} style={{ border: '1px solid rgba(255,255,255,.08)', background: 'rgba(255,255,255,.02)', borderRadius: 16, padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div className="skeleton" style={{ width: 9, height: 9, borderRadius: '50%', flexShrink: 0 }} />
+                <div className="skeleton" style={{ height: 16, width: '55%', borderRadius: 6 }} />
+                <div className="skeleton" style={{ height: 20, width: 72, borderRadius: 6, marginLeft: 'auto' }} />
+              </div>
+              <div className="skeleton" style={{ height: 8, borderRadius: 6 }} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {[0, 1, 2].map(j => <div key={j} className="skeleton" style={{ height: 14, borderRadius: 6, width: j === 1 ? '70%' : '85%' }} />)}
+              </div>
+              <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+                <div className="skeleton" style={{ flex: 1, height: 38, borderRadius: 10 }} />
+                <div className="skeleton" style={{ flex: 1, height: 38, borderRadius: 10 }} />
+              </div>
+            </div>
+          ))}
+        </div>
       ) : visible.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '60px 0', border: '1px dashed rgba(255,255,255,.08)', borderRadius: 16, marginTop: 18 }}>
           <div style={{ fontSize: 14, color: 'rgba(244,242,248,.35)' }}>
             {proxies.length === 0 ? 'Você ainda não tem proxies. Adquira uma no catálogo.' : 'Nenhuma proxy encontrada com esse filtro.'}
           </div>
           {proxies.length === 0 && (
-            <Link href="/dashboard/recarga" style={{ display: 'inline-flex', marginTop: 18, alignItems: 'center', gap: 8, background: AC, color: '#0a0612', fontWeight: 800, fontSize: 13, padding: '11px 20px', borderRadius: 10, textDecoration: 'none' }}>
+            <Link href="?checkout=1" style={{ display: 'inline-flex', marginTop: 18, alignItems: 'center', gap: 8, background: AC, color: '#0a0612', fontWeight: 800, fontSize: 13, padding: '11px 20px', borderRadius: 10, textDecoration: 'none' }}>
               Adquirir primeira proxy
             </Link>
           )}
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 16, marginTop: 18 }}>
+        <div className="dash-proxy-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 16, marginTop: 18 }}>
           {visible.map(p => {
             const pct = p.totalGb > 0 ? Math.min(100, Math.round((p.usedGb / p.totalGb) * 100)) : 0
             const remaining = Math.max(0, p.totalGb - p.usedGb)
@@ -185,11 +228,11 @@ export default function ProxiesPage() {
             const [tagBg, tagFg, tagLabel] = typeMap[p.type] ?? typeMap['ipv4']
             const dot = p.status === 'ativa' ? '#34d399' : 'rgba(244,242,248,.4)'
             return (
-              <div key={p.id} style={{ border: '1px solid rgba(255,255,255,.08)', background: 'rgba(255,255,255,.02)', borderRadius: 16, padding: 20 }}>
+              <div key={p.id} className="proxy-card" style={{ border: '1px solid rgba(255,255,255,.08)', background: 'rgba(255,255,255,.02)', borderRadius: 16, padding: 20 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
                     <span style={{ width: 9, height: 9, borderRadius: '50%', flexShrink: 0, background: dot, boxShadow: `0 0 8px ${dot}`, display: 'inline-block' }}/>
-                    <h3 style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 700, fontSize: 15.5, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</h3>
+                    <h3 style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 600, fontSize: 15, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</h3>
                   </div>
                   <span style={{ flexShrink: 0, fontFamily: "'JetBrains Mono',monospace", fontSize: 9, letterSpacing: '.1em', padding: '4px 8px', borderRadius: 6, background: tagBg, color: tagFg }}>{tagLabel}</span>
                 </div>
@@ -204,7 +247,7 @@ export default function ProxiesPage() {
                       </span>
                     </div>
                     <div style={{ height: 8, borderRadius: 6, background: 'rgba(255,255,255,.07)', overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${pct}%`, borderRadius: 6, background: `linear-gradient(90deg,${AC},${AC2})` }}/>
+                      <AnimBar pct={pct} color={barColor} />
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 11, color: 'rgba(244,242,248,.4)' }}>
                       <span>{pct}% usado</span><span>{fmtGb(remaining)} restante</span>
@@ -249,7 +292,7 @@ export default function ProxiesPage() {
                 </div>
 
                 <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
-                  <Link href="/dashboard/recarga" style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.12)', color: '#f4f2f8', fontWeight: 700, fontSize: 13, padding: 11, borderRadius: 10, textDecoration: 'none' }}>
+                  <Link href="?checkout=1" style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.12)', color: '#f4f2f8', fontWeight: 700, fontSize: 13, padding: 11, borderRadius: 10, textDecoration: 'none' }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.3M21 4v5h-5"/></svg>Recarregar
                   </Link>
                   <Link href={`/dashboard/proxies/${p.id}`} style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: AC, color: '#0a0612', fontWeight: 800, fontSize: 13, padding: 11, borderRadius: 10, textDecoration: 'none' }}>
@@ -267,17 +310,20 @@ export default function ProxiesPage() {
 
 function capitalize(s: string) { return s.charAt(0).toUpperCase() + s.slice(1) }
 
-function StatCard({ label, icon, value, valueColor, highlight }: { label: string; icon: React.ReactNode; value: string; valueColor?: string; highlight?: boolean }) {
+function StatCard({ label, icon, value, valueColor, highlight, loading }: { label: string; icon: React.ReactNode; value: string; valueColor?: string; highlight?: boolean; loading?: boolean }) {
   return (
-    <div style={{
+    <div className="dash-stat-card" style={{
       border: highlight ? `1px solid color-mix(in srgb,${AC} 24%,transparent)` : '1px solid rgba(255,255,255,.08)',
       background: highlight ? `linear-gradient(180deg,color-mix(in srgb,${AC} 12%,transparent),rgba(255,255,255,.01))` : 'rgba(255,255,255,.025)',
-      borderRadius: 15, padding: 18,
+      borderRadius: 16, padding: 20,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: "'JetBrains Mono',monospace", fontSize: 9.5, letterSpacing: '.13em', color: 'rgba(244,242,248,.45)', textTransform: 'uppercase' }}>
         {icon}{label}
       </div>
-      <div style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 800, fontSize: 28, marginTop: 10, color: valueColor ?? '#f4f2f8' }}>{value}</div>
+      {loading
+        ? <div className="skeleton" style={{ height: 28, width: '60%', borderRadius: 6, marginTop: 12 }} />
+        : <div style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 500, fontSize: 20, marginTop: 8, color: valueColor ?? '#f4f2f8' }}>{value}</div>
+      }
     </div>
   )
 }

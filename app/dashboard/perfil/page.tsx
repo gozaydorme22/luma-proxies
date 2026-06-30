@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { signOut } from '@/lib/firebase/auth-actions'
@@ -12,6 +12,18 @@ const AC2 = 'color-mix(in srgb,#a855f7 45%,#ffffff)'
 
 type Tab = 'visao-geral' | 'meu-plano' | 'conta'
 
+interface ProxyInfo {
+  id: string
+  name: string
+  host: string
+  port: number
+  proxyUser: string
+  proxyPass: string
+  status: 'ativa' | 'suspensa' | 'inativa'
+  totalGb: number
+  usedGb: number
+}
+
 export default function PerfilPage() {
   const { user } = useAuth()
   const router   = useRouter()
@@ -22,11 +34,19 @@ export default function PerfilPage() {
   const [saving, setSaving]     = useState(false)
   const [msg, setMsg]           = useState<{ text: string; ok: boolean } | null>(null)
 
-  const [showPwd, setShowPwd]     = useState(false)
+  const [showPwd, setShowPwd]       = useState(false)
   const [currentPwd, setCurrentPwd] = useState('')
-  const [newPwd, setNewPwd]       = useState('')
-  const [pwdMsg, setPwdMsg]       = useState<{ text: string; ok: boolean } | null>(null)
-  const [pwdSaving, setPwdSaving] = useState(false)
+  const [newPwd, setNewPwd]         = useState('')
+  const [pwdMsg, setPwdMsg]         = useState<{ text: string; ok: boolean } | null>(null)
+  const [pwdSaving, setPwdSaving]   = useState(false)
+
+  const [proxies, setProxies]         = useState<ProxyInfo[]>([])
+  const [activeCount, setActiveCount] = useState<number | null>(null)
+  const [ordersCount, setOrdersCount] = useState<number | null>(null)
+  const [dataLoading, setDataLoading] = useState(false)
+  const [copiedId, setCopiedId]       = useState<string | null>(null)
+  const [checkerMap, setCheckerMap]   = useState<Record<string, boolean>>({})
+  const [removing, setRemoving]       = useState<string | null>(null)
 
   const email   = user?.email ?? ''
   const name    = user?.displayName || email.split('@')[0]
@@ -36,11 +56,63 @@ export default function PerfilPage() {
     ? new Date(user.metadata.creationTime).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
     : '—'
 
+  useEffect(() => {
+    async function loadData() {
+      setDataLoading(true)
+      try {
+        const [proxRes, orderRes] = await Promise.all([
+          fetch('/api/proxies'),
+          fetch('/api/pedidos'),
+        ])
+        const proxJson  = proxRes.ok  ? await proxRes.json()  : { proxies: [] }
+        const orderJson = orderRes.ok ? await orderRes.json() : { orders: [] }
+
+        const myProxies: ProxyInfo[] = proxJson.proxies ?? []
+        setProxies(myProxies)
+        setOrdersCount((orderJson.orders ?? []).length)
+
+        const toCheck = myProxies.filter(p => p.status === 'ativa')
+        if (toCheck.length === 0) {
+          setActiveCount(0)
+          return
+        }
+
+        const checkRes = await fetch('/api/proxy-check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            proxies: toCheck.map(p => `${p.host}:${p.port}:${p.proxyUser}:${p.proxyPass}`),
+          }),
+        })
+        if (checkRes.ok) {
+          const results: Array<{ status: string }> = await checkRes.json()
+          const map: Record<string, boolean> = {}
+          toCheck.forEach((p, i) => { map[p.id] = results[i]?.status === 'success' })
+          setCheckerMap(map)
+          setActiveCount(Object.values(map).filter(Boolean).length)
+        } else {
+          setActiveCount(toCheck.length)
+        }
+      } catch {
+        setActiveCount(null)
+        setOrdersCount(null)
+      } finally {
+        setDataLoading(false)
+      }
+    }
+    loadData()
+  }, [])
+
   async function saveName() {
     if (!auth.currentUser || !newName.trim()) return
     setSaving(true)
     try {
       await updateProfile(auth.currentUser, { displayName: newName.trim() })
+      await fetch('/api/auth/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName.trim() }),
+      })
       setMsg({ text: 'Nome atualizado!', ok: true })
       setEditName(false)
     } catch {
@@ -76,6 +148,14 @@ export default function PerfilPage() {
     router.push('/login')
   }
 
+  function copyCredentials(proxy: ProxyInfo) {
+    const str = `${proxy.host}:${proxy.port}:${proxy.proxyUser}:${proxy.proxyPass}`
+    navigator.clipboard.writeText(str).then(() => {
+      setCopiedId(proxy.id)
+      setTimeout(() => setCopiedId(null), 2000)
+    })
+  }
+
   const field = (label: string, value: React.ReactNode) => (
     <div style={{ border: '1px solid rgba(255,255,255,.08)', borderRadius: 14, overflow: 'hidden' }}>
       <div style={{ padding: '10px 18px 4px', fontFamily: "'JetBrains Mono',monospace", fontSize: 10, letterSpacing: '.14em', color: 'rgba(244,242,248,.35)', textTransform: 'uppercase' }}>{label}</div>
@@ -98,14 +178,14 @@ export default function PerfilPage() {
       {/* avatar + info */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 28 }}>
         <div style={{ position: 'relative' }}>
-          <div style={{ width: 72, height: 72, borderRadius: '50%', background: `linear-gradient(135deg,${AC},${AC2})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, fontWeight: 900, color: '#0a0612', boxShadow: `0 0 0 3px rgba(168,85,247,.25), 0 8px 24px rgba(0,0,0,.5)` }}>
+          <div style={{ width: 72, height: 72, borderRadius: '50%', background: `linear-gradient(135deg,${AC},${AC2})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, fontWeight: 600, color: '#0a0612', boxShadow: `0 0 0 3px rgba(168,85,247,.25), 0 8px 24px rgba(0,0,0,.5)` }}>
             {user?.photoURL
               ? <img src={user.photoURL} width={72} height={72} style={{ borderRadius: '50%', objectFit: 'cover' }} alt="" />
               : initial}
           </div>
         </div>
         <div style={{ flex: 1 }}>
-          <div style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 800, fontSize: 22, color: '#f4f2f8' }}>{name}</div>
+          <div style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 600, fontSize: 17, color: '#f4f2f8' }}>{name}</div>
           <div style={{ fontSize: 13, color: 'rgba(244,242,248,.45)', marginTop: 3 }}>{email}</div>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 8, background: 'rgba(52,211,153,.1)', border: '1px solid rgba(52,211,153,.2)', borderRadius: 999, padding: '4px 10px', fontSize: 11.5, fontWeight: 700, color: '#34d399', fontFamily: "'JetBrains Mono',monospace", letterSpacing: '.06em' }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#34d399', display: 'inline-block' }} />
@@ -130,14 +210,12 @@ export default function PerfilPage() {
           {tab === 'visao-geral' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {[
-                { label: 'Proxies ativas', value: '—', color: AC },
-                { label: 'GB consumidos (30d)', value: '—', color: '#f4f2f8' },
-                { label: 'GB disponíveis', value: '—', color: '#34d399' },
-                { label: 'Pedidos realizados', value: '—', color: '#f4f2f8' },
+                { label: 'Proxys ativas', value: dataLoading ? '...' : activeCount !== null ? String(activeCount) : '—', color: AC },
+                { label: 'Pedidos realizados', value: dataLoading ? '...' : ordersCount !== null ? String(ordersCount) : '—', color: '#f4f2f8' },
               ].map(s => (
                 <div key={s.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid rgba(255,255,255,.07)', borderRadius: 12, padding: '14px 18px' }}>
                   <span style={{ fontSize: 13.5, color: 'rgba(244,242,248,.6)' }}>{s.label}</span>
-                  <span style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 800, fontSize: 18, color: s.color }}>{s.value}</span>
+                  <span style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 500, fontSize: 15, color: s.color }}>{s.value}</span>
                 </div>
               ))}
             </div>
@@ -146,28 +224,95 @@ export default function PerfilPage() {
           {/* ── MEU PLANO ── */}
           {tab === 'meu-plano' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div style={{ border: `1px solid color-mix(in srgb,${AC} 25%,transparent)`, borderRadius: 14, padding: '18px 20px', background: `color-mix(in srgb,${AC} 8%,transparent)` }}>
-                <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, letterSpacing: '.14em', color: AC2, textTransform: 'uppercase' }}>Plano atual</div>
-                <div style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 900, fontSize: 26, marginTop: 6 }}>Free</div>
-                <div style={{ fontSize: 13, color: 'rgba(244,242,248,.5)', marginTop: 4 }}>Sem GB ativo. Adicione saldo para começar.</div>
-              </div>
-              <div style={{ border: '1px solid rgba(255,255,255,.08)', borderRadius: 14, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {[
-                  ['Tipo de proxy', '—'],
-                  ['GB ativo', '0 GB'],
-                  ['Validade', 'Não expira'],
-                  ['Região padrão', 'Brasil'],
-                ].map(([k, v]) => (
-                  <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5 }}>
-                    <span style={{ color: 'rgba(244,242,248,.5)' }}>{k}</span>
-                    <span style={{ fontWeight: 700, color: '#f4f2f8' }}>{v}</span>
+              {dataLoading ? (
+                <div style={{ textAlign: 'center', padding: '32px 0', color: 'rgba(244,242,248,.35)', fontSize: 13 }}>Carregando proxies...</div>
+              ) : proxies.length === 0 ? (
+                <>
+                  <div style={{ border: `1px solid rgba(168,85,247,.2)`, borderRadius: 14, padding: '18px 20px', background: 'rgba(168,85,247,.06)' }}>
+                    <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, letterSpacing: '.14em', color: AC2, textTransform: 'uppercase' }}>Plano atual</div>
+                    <div style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 600, fontSize: 18, marginTop: 6 }}>Sem proxies</div>
+                    <div style={{ fontSize: 13, color: 'rgba(244,242,248,.5)', marginTop: 4 }}>Nenhuma proxy atribuída à sua conta ainda.</div>
                   </div>
-                ))}
-              </div>
-              <a href="/dashboard/recarga" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: AC, color: '#0a0612', fontWeight: 800, fontSize: 14, padding: '13px 20px', borderRadius: 12, textDecoration: 'none', boxShadow: `0 8px 24px color-mix(in srgb,${AC} 40%,transparent)` }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
-                Adicionar saldo / Recarregar
-              </a>
+                  <a href="?checkout=1" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: AC, color: '#0a0612', fontWeight: 800, fontSize: 14, padding: '13px 20px', borderRadius: 12, textDecoration: 'none', boxShadow: `0 8px 24px color-mix(in srgb,${AC} 40%,transparent)` }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+                    Comprar proxies
+                  </a>
+                </>
+              ) : (
+                proxies.map((proxy) => {
+                  const connStr    = `${proxy.host}:${proxy.port}:${proxy.proxyUser}:${proxy.proxyPass}`
+                  const isCopied   = copiedId === proxy.id
+                  const checkerDone = proxy.id in checkerMap
+                  const isAlive    = checkerDone ? checkerMap[proxy.id] : proxy.status === 'ativa'
+                  const isRemoving = removing === proxy.id
+                  const pct        = proxy.totalGb > 0 ? Math.min(100, Math.round((proxy.usedGb / proxy.totalGb) * 100)) : 0
+                  const barColor   = pct >= 95 ? '#f87171' : pct >= 75 ? '#fbbf24' : '#34d399'
+                  return (
+                    <div key={proxy.id} style={{ border: `1px solid color-mix(in srgb,${isAlive ? AC : '#f87171'} 20%,rgba(255,255,255,.06))`, borderRadius: 16, overflow: 'hidden' }}>
+                      <div style={{ padding: '14px 18px', background: `color-mix(in srgb,${isAlive ? AC : '#f87171'} 5%,transparent)`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div>
+                          <div style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 700, fontSize: 14, color: '#f4f2f8' }}>{proxy.name || proxy.host}</div>
+                          <div style={{ fontSize: 11.5, color: 'rgba(244,242,248,.45)', marginTop: 2 }}>Proxy Residencial Rotativa</div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: isAlive ? 'rgba(52,211,153,.12)' : 'rgba(248,113,113,.1)', border: `1px solid ${isAlive ? 'rgba(52,211,153,.25)' : 'rgba(248,113,113,.2)'}`, borderRadius: 999, padding: '4px 10px', fontSize: 11, fontWeight: 700, color: isAlive ? '#34d399' : '#f87171', fontFamily: "'JetBrains Mono',monospace" }}>
+                            <span style={{ width: 5, height: 5, borderRadius: '50%', background: isAlive ? '#34d399' : '#f87171', display: 'inline-block' }} />
+                            {checkerDone ? (isAlive ? 'ativa' : 'inativa') : proxy.status}
+                          </div>
+                          {checkerDone && !isAlive && (
+                            <button
+                              disabled={isRemoving}
+                              onClick={async () => {
+                                if (!confirm('Remover esta proxy inativa?')) return
+                                setRemoving(proxy.id)
+                                try {
+                                  const r = await fetch(`/api/proxies/${proxy.id}`, { method: 'DELETE' })
+                                  if (r.ok) setProxies(prev => prev.filter(p => p.id !== proxy.id))
+                                  else { const d = await r.json(); alert(d.error ?? 'Erro ao remover.') }
+                                } finally { setRemoving(null) }
+                              }}
+                              style={{ background: 'rgba(248,113,113,.15)', border: '1px solid rgba(248,113,113,.3)', borderRadius: 8, padding: '5px 10px', color: '#f87171', cursor: 'pointer', fontSize: 11, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace", opacity: isRemoving ? .5 : 1 }}
+                            >
+                              {isRemoving ? '...' : 'Remover'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <div style={{ padding: '12px 18px', borderTop: '1px solid rgba(255,255,255,.05)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'rgba(244,242,248,.4)', marginBottom: 6 }}>
+                          <span style={{ fontFamily: "'JetBrains Mono',monospace", letterSpacing: '.1em', textTransform: 'uppercase', fontSize: 10 }}>Uso de GB</span>
+                          <span>{proxy.usedGb.toFixed(2)} / {proxy.totalGb} GB</span>
+                        </div>
+                        <div style={{ height: 6, borderRadius: 4, background: 'rgba(255,255,255,.07)', overflow: 'hidden', marginBottom: 4 }}>
+                          <div style={{ height: '100%', width: `${pct}%`, borderRadius: 4, background: `linear-gradient(90deg,${barColor},${barColor}aa)`, transition: 'width .4s ease' }} />
+                        </div>
+                        <div style={{ fontSize: 11, color: 'rgba(244,242,248,.35)', textAlign: 'right' }}>{pct}% usado</div>
+                      </div>
+                      <div style={{ padding: '14px 18px', borderTop: '1px solid rgba(255,255,255,.05)' }}>
+                        <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, letterSpacing: '.14em', color: 'rgba(244,242,248,.35)', textTransform: 'uppercase', marginBottom: 8 }}>Credenciais de conexão</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                          <div style={{ flex: 1, background: 'rgba(0,0,0,.3)', border: '1px solid rgba(255,255,255,.08)', borderRadius: 10, padding: '10px 14px', fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: 'rgba(244,242,248,.75)', wordBreak: 'break-all', lineHeight: 1.5 }}>
+                            {connStr}
+                          </div>
+                          <button
+                            onClick={() => copyCredentials(proxy)}
+                            style={{ flexShrink: 0, background: isCopied ? 'rgba(52,211,153,.15)' : 'rgba(168,85,247,.15)', border: `1px solid ${isCopied ? 'rgba(52,211,153,.3)' : 'rgba(168,85,247,.3)'}`, borderRadius: 10, padding: '10px 14px', color: isCopied ? '#34d399' : AC, cursor: 'pointer', fontSize: 11, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace", transition: 'all .2s', whiteSpace: 'nowrap' }}>
+                            {isCopied ? 'Copiado!' : 'Copiar'}
+                          </button>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                          {[['Host', proxy.host], ['Porta', String(proxy.port)], ['Usuário', proxy.proxyUser], ['Senha', proxy.proxyPass]].map(([k, v]) => (
+                            <div key={k} style={{ background: 'rgba(0,0,0,.2)', borderRadius: 8, padding: '8px 12px' }}>
+                              <div style={{ fontSize: 10, color: 'rgba(244,242,248,.3)', fontFamily: "'JetBrains Mono',monospace", letterSpacing: '.1em', textTransform: 'uppercase', marginBottom: 2 }}>{k}</div>
+                              <div style={{ fontSize: 12, color: '#f4f2f8', fontFamily: "'JetBrains Mono',monospace", wordBreak: 'break-all' }}>{v}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
             </div>
           )}
 
@@ -175,7 +320,6 @@ export default function PerfilPage() {
           {tab === 'conta' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-              {/* nome */}
               {field('Nome de usuário',
                 editName ? (
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 2 }}>
@@ -198,10 +342,8 @@ export default function PerfilPage() {
               )}
               {msg && <div style={{ fontSize: 12.5, color: msg.ok ? '#34d399' : '#f87171', marginTop: -6 }}>{msg.text}</div>}
 
-              {/* email */}
               {field('E-mail', <span style={{ fontSize: 15, color: 'rgba(244,242,248,.7)' }}>{email}</span>)}
 
-              {/* foto */}
               {field('Foto de perfil',
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 2 }}>
                   <div style={{ width: 38, height: 38, borderRadius: '50%', background: `linear-gradient(135deg,${AC},${AC2})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 800, color: '#0a0612', flexShrink: 0 }}>
@@ -211,10 +353,8 @@ export default function PerfilPage() {
                 </div>
               )}
 
-              {/* membro desde */}
               {field('Membro desde', <span style={{ fontSize: 15, color: 'rgba(244,242,248,.7)', textTransform: 'capitalize' }}>{memberSince}</span>)}
 
-              {/* senha */}
               {field('Senha',
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -241,7 +381,6 @@ export default function PerfilPage() {
                 </div>
               )}
 
-              {/* sair */}
               <button onClick={handleSignOut} style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 4, background: 'none', border: 'none', cursor: 'pointer', color: '#f87171', fontSize: 13.5, fontWeight: 700, padding: '4px 0', fontFamily: "'Manrope',sans-serif" }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
                 Sair da conta

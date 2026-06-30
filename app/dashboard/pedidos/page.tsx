@@ -39,8 +39,8 @@ export default function PedidosPage() {
 
   return (
     <div style={{ animation: 'lumaRise .4s ease both' }}>
-      <h1 style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 900, fontSize: 30, letterSpacing: '-.02em', margin: 0 }}>Pedidos</h1>
-      <p style={{ fontSize: 15, color: 'rgba(244,242,248,.55)', margin: '8px 0 0' }}>Histórico de recargas e novas proxies da sua conta.</p>
+      <h1 style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 600, fontSize: 22, letterSpacing: '-.01em', margin: 0 }}>Pedidos</h1>
+      <p style={{ fontSize: 13, color: 'rgba(244,242,248,.45)', margin: '5px 0 0' }}>Histórico de recargas e novas proxies da sua conta.</p>
 
       {loading ? (
         <div style={{ marginTop: 30, color: 'rgba(244,242,248,.3)', fontSize: 14 }}>Carregando pedidos...</div>
@@ -59,23 +59,23 @@ export default function PedidosPage() {
                   <span># {o.id.slice(0, 8).toUpperCase()} · {fmtDate(o.createdAt)}</span>
                   <span style={{ background: badgeBg, color: badgeFg, padding: '4px 10px', borderRadius: 7, letterSpacing: '.06em' }}>{badgeText}</span>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr', gap: 14, alignItems: 'center', marginTop: 14 }}>
+                <div className="order-item-grid">
                   <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
                     <span style={{ width: 38, height: 38, flexShrink: 0, borderRadius: 10, background: `color-mix(in srgb,${AC} 14%,transparent)`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: AC2 }}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/></svg>
                     </span>
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, fontSize: 14 }}>{o.productName}</div>
+                      <div style={{ fontWeight: 500, fontSize: 13.5 }}>{o.productName}</div>
                       <div style={{ fontSize: 12, color: 'rgba(244,242,248,.45)', textTransform: 'capitalize' }}>{o.productType.replace('_', ' ')}</div>
                     </div>
                   </div>
                   <div>
                     <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 9, letterSpacing: '.13em', color: 'rgba(244,242,248,.4)', textTransform: 'uppercase' }}>Volume</div>
-                    <div style={{ fontWeight: 700, fontSize: 15, marginTop: 3 }}>{vol}</div>
+                    <div style={{ fontWeight: 500, fontSize: 13.5, marginTop: 3 }}>{vol}</div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 9, letterSpacing: '.13em', color: 'rgba(244,242,248,.4)', textTransform: 'uppercase' }}>Total</div>
-                    <div style={{ fontWeight: 800, fontSize: 16, marginTop: 3, color: AC2 }}>
+                    <div style={{ fontWeight: 500, fontSize: 13.5, marginTop: 3, color: AC2 }}>
                       R$ {o.totalBrl.toFixed(2).replace('.', ',')}
                     </div>
                   </div>

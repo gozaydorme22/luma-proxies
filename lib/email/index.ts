@@ -49,9 +49,9 @@ export async function sendWelcomeEmail(to: string, name: string) {
       </ul>
     </div>
 
-    <a href="${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/dashboard"
+    <a href="${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/"
        style="display:inline-block;background:#a855f7;color:#0a0612;font-weight:800;font-size:15px;padding:14px 28px;border-radius:12px;text-decoration:none;letter-spacing:-.01em;">
-      Acessar o Painel
+      Acessar minha conta
     </a>
 
     <p style="margin:28px 0 0;font-size:13px;color:rgba(244,242,248,.35);">
@@ -113,9 +113,9 @@ export async function sendProxyDeliveryEmail(to: string, name: string, proxy: {
       </table>
     </div>
 
-    <a href="${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/dashboard/proxies"
+    <a href="${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/"
        style="display:inline-block;background:#a855f7;color:#0a0612;font-weight:800;font-size:15px;padding:14px 28px;border-radius:12px;text-decoration:none;">
-      Ver no Painel
+      Acessar minha conta
     </a>
 
     <p style="margin:24px 0 0;font-size:13px;color:rgba(244,242,248,.4);line-height:1.6;">
@@ -171,9 +171,9 @@ export async function sendOrderConfirmationEmail(to: string, name: string, order
       Após a confirmação do PIX, sua proxy será ativada automaticamente e você receberá outro e-mail com as credenciais.
     </p>
 
-    <a href="${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/dashboard/pedidos"
+    <a href="${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/"
        style="display:inline-block;background:#a855f7;color:#0a0612;font-weight:800;font-size:15px;padding:14px 28px;border-radius:12px;text-decoration:none;">
-      Acompanhar Pedido
+      Acessar minha conta
     </a>`
 
   await resend.emails.send({

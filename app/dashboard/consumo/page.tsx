@@ -46,26 +46,26 @@ export default function ConsumoPage() {
 
   return (
     <div style={{ animation: 'lumaRise .4s ease both' }}>
-      <h1 style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 900, fontSize: 30, letterSpacing: '-.02em', margin: 0 }}>Consumo de dados</h1>
-      <p style={{ fontSize: 15, color: 'rgba(244,242,248,.55)', margin: '8px 0 0' }}>Acompanhe quanto cada proxy consumiu. Dados atualizados via API do fornecedor.</p>
+      <h1 style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 600, fontSize: 22, letterSpacing: '-.01em', margin: 0 }}>Consumo de dados</h1>
+      <p style={{ fontSize: 13, color: 'rgba(244,242,248,.45)', margin: '5px 0 0' }}>Acompanhe quanto cada proxy consumiu. Dados atualizados via API do fornecedor.</p>
 
       {/* STAT CARDS */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginTop: 24 }}>
+      <div className="consumo-stat-grid">
         {[
           { label: 'Total usado', value: fmtGb(totalUsed), color: AC2 },
           { label: 'Disponível', value: fmtGb(Math.max(0, totalLimit - totalUsed)), color: '#34d399' },
           { label: 'Média / dia (14d)', value: fmtGb(avgGb), color: '#f4f2f8' },
           { label: 'Pico (1 dia)', value: fmtGb(peakGb), color: '#fbbf24' },
         ].map(s => (
-          <div key={s.label} style={{ border: '1px solid rgba(255,255,255,.08)', background: 'rgba(255,255,255,.025)', borderRadius: 15, padding: 20 }}>
+          <div key={s.label} className="dash-stat-card" style={{ border: '1px solid rgba(255,255,255,.08)', background: 'rgba(255,255,255,.025)', borderRadius: 16, padding: 20 }}>
             <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 9.5, letterSpacing: '.13em', color: 'rgba(244,242,248,.45)', textTransform: 'uppercase' }}>{s.label}</div>
-            <div style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 900, fontSize: 28, marginTop: 10, color: s.color }}>{loading ? '–' : s.value}</div>
+            <div style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 500, fontSize: 20, marginTop: 8, color: s.color }}>{loading ? '–' : s.value}</div>
           </div>
         ))}
       </div>
 
       {/* CHART */}
-      <div style={{ border: '1px solid rgba(255,255,255,.08)', background: 'rgba(255,255,255,.02)', borderRadius: 18, padding: '22px 24px', marginTop: 16 }}>
+      <div className="dash-section" style={{ border: '1px solid rgba(255,255,255,.08)', background: 'rgba(255,255,255,.02)', borderRadius: 18, padding: '22px 24px', marginTop: 16 }}>
         <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, letterSpacing: '.14em', color: 'rgba(244,242,248,.45)', textTransform: 'uppercase' }}>Histórico · últimos 14 dias</div>
         {sumGb === 0 && !loading && (
           <p style={{ fontSize: 13, color: 'rgba(244,242,248,.35)', marginTop: 12 }}>Histórico disponível após integração com API do fornecedor.</p>
@@ -91,7 +91,7 @@ export default function ConsumoPage() {
       </div>
 
       {/* POR PROXY */}
-      <h2 style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 800, fontSize: 18, margin: '28px 0 14px' }}>Consumo por proxy</h2>
+      <h2 style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 600, fontSize: 15, margin: '28px 0 14px' }}>Consumo por proxy</h2>
 
       {loading ? (
         <div style={{ color: 'rgba(244,242,248,.3)', fontSize: 14 }}>Carregando...</div>
@@ -107,8 +107,8 @@ export default function ConsumoPage() {
             return (
               <div key={p.id} style={{ border: '1px solid rgba(255,255,255,.08)', background: 'rgba(255,255,255,.02)', borderRadius: 14, padding: '16px 18px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
-                  <span style={{ fontWeight: 700, fontSize: 14.5 }}>{p.name}</span>
-                  <span style={{ fontWeight: 700, fontSize: 13.5 }}>
+                  <span style={{ fontWeight: 500, fontSize: 13.5 }}>{p.name}</span>
+                  <span style={{ fontWeight: 500, fontSize: 13 }}>
                     <span style={{ color: barColor }}>{fmtGb(p.usedGb)}</span>
                     <span style={{ color: 'rgba(244,242,248,.4)' }}> / {fmtGb(p.totalGb)}</span>
                   </span>

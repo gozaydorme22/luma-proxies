@@ -24,7 +24,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `verifyIdToken: ${String(e)}` }, { status: 500 })
     }
 
-    const { name, email } = await req.json() as { name: string; email: string }
+    const { name, email: bodyEmail } = await req.json() as { name: string; email: string }
+    // Always use the email from the verified Firebase token — never trust the request body
+    const email = decoded.email ?? bodyEmail
     console.log('[send-verification] uid:', decoded.uid, 'email:', email)
 
     const supabase = createServerClient()
@@ -41,7 +43,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `supabase insert threw: ${String(e)}` }, { status: 500 })
     }
 
-    // Step 3: invalidate old codes
+    // Step 3: rate-limit — reject if a code was requested in the last 60 seconds
+    const { data: recentCode } = await supabase
+      .from('verification_codes')
+      .select('created_at')
+      .eq('uid', decoded.uid)
+      .eq('used', false)
+      .gte('created_at', new Date(Date.now() - 60_000).toISOString())
+      .limit(1)
+      .single()
+
+    if (recentCode) {
+      return NextResponse.json({ error: 'Aguarde 1 minuto antes de solicitar um novo código.' }, { status: 429 })
+    }
+
+    // Step 4 (was 3): invalidate old codes
     try {
       await supabase
         .from('verification_codes')
@@ -79,7 +95,7 @@ export async function POST(req: NextRequest) {
       const result = await resend.emails.send({
         from:    FROM,
         to:      [email],
-        subject: `${code} é o seu código de verificação — Luma Proxies`,
+        subject: `${code} é o seu código de verificação — Luma Proxys`,
         html: `<!DOCTYPE html>
 <html lang="pt-BR">
 <head><meta charset="UTF-8"><title>Verificação</title></head>
@@ -88,7 +104,7 @@ export async function POST(req: NextRequest) {
 <tr><td align="center">
 <table width="480" cellpadding="0" cellspacing="0" style="max-width:480px;width:100%;">
   <tr><td style="padding-bottom:28px;text-align:center;">
-    <span style="font-size:20px;font-weight:800;letter-spacing:-.02em;">LUMA<span style="color:#c084fc;"> PROXIES</span></span>
+    <span style="font-size:20px;font-weight:800;letter-spacing:-.02em;">LUMA<span style="color:#c084fc;" > PROXYS</span></span>
   </td></tr>
   <tr><td style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:18px;padding:36px 40px;">
     <h1 style="margin:0 0 8px;font-size:22px;font-weight:900;color:#f4f2f8;">Olá, ${firstName}!</h1>
@@ -99,7 +115,7 @@ export async function POST(req: NextRequest) {
     <p style="margin:0;font-size:13px;color:rgba(244,242,248,.35);">Se você não criou esta conta, ignore este e-mail.</p>
   </td></tr>
   <tr><td style="padding-top:24px;text-align:center;font-size:12px;color:rgba(244,242,248,.25);">
-    © 2026 Luma Proxies
+    © 2026 Luma Proxys
   </td></tr>
 </table>
 </td></tr></table>

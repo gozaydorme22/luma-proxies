@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
   if (!uid) return NextResponse.json({ error: 'unauthenticated' }, { status: 401 })
   if (role !== 'admin') return NextResponse.json({ error: 'forbidden' }, { status: 403 })
 
-  const { product_id, client_id, order_id } = await req.json()
+  const { product_id, client_id } = await req.json()
   if (!product_id || !client_id) {
     return NextResponse.json({ error: 'product_id e client_id são obrigatórios.' }, { status: 400 })
   }
@@ -60,18 +60,18 @@ export async function POST(req: NextRequest) {
     .eq('id', client_id)
     .single()
 
-  // 4. Envia email com as credenciais
+  // 4. Envia email com as credenciais (fire-and-forget)
   if (client?.email) {
     const name = client.name || client.email.split('@')[0]
-    await resend.emails.send({
+    resend.emails.send({
       from:    FROM,
       to:      [client.email],
-      subject: `Proxy ativada — ${proxy.gb_limit}GB · Luma Proxies`,
+      subject: `Proxy ativada — ${proxy.gb_limit}GB · Luma Proxys`,
       html: `<!DOCTYPE html><html lang="pt-BR"><body style="margin:0;padding:40px 20px;background:#08070c;font-family:'Helvetica Neue',Arial,sans-serif;color:#f4f2f8;">
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
 <table width="480" cellpadding="0" cellspacing="0" style="max-width:480px;width:100%;">
   <tr><td style="padding-bottom:24px;text-align:center;">
-    <span style="font-size:20px;font-weight:800;letter-spacing:-.02em;">LUMA<span style="color:#c084fc;"> PROXIES</span></span>
+    <span style="font-size:20px;font-weight:800;letter-spacing:-.02em;">LUMA<span style="color:#c084fc;" > PROXYS</span></span>
   </td></tr>
   <tr><td style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:18px;padding:32px 36px;">
     <h2 style="margin:0 0 8px;font-size:22px;font-weight:900;">Sua proxy está pronta! 🚀</h2>
@@ -95,17 +95,17 @@ export async function POST(req: NextRequest) {
     <p style="margin:0 0 8px;font-size:12.5px;color:rgba(244,242,248,.45);line-height:1.7;">
       ⚡ Configure como <b>HTTP</b> (porta ${proxy.port}) ou <b>SOCKS5</b> (porta ${proxy.port + 1}).<br>
       🔄 IPs rotativos — cada requisição usa um IP diferente.<br>
-      📊 Acompanhe seu consumo no dashboard.
+      📊 Acesse sua conta para ver o status das suas proxies.
     </p>
-    <a href="${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/dashboard/proxies"
+    <a href="${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/"
        style="display:inline-block;margin-top:16px;background:#a855f7;color:#0a0612;font-weight:800;font-size:14px;padding:13px 28px;border-radius:12px;text-decoration:none;">
-      Acessar dashboard
+      Acessar minha conta
     </a>
   </td></tr>
-  <tr><td style="padding-top:20px;text-align:center;font-size:11px;color:rgba(244,242,248,.25);">© 2026 Luma Proxies</td></tr>
+  <tr><td style="padding-top:20px;text-align:center;font-size:11px;color:rgba(244,242,248,.25);">© 2026 Luma Proxys</td></tr>
 </table></td></tr></table>
 </body></html>`,
-    })
+    }).catch(e => console.error('[fulfill] email', e))
   }
 
   return NextResponse.json({

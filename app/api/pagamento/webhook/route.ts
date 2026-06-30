@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { Resend } from 'resend'
+import {
+  createSubAccount,
+  updateSubAccount,
+  listSubAccounts,
+  makeUsername,
+  makePassword,
+  mbToGb,
+  GATEWAY_HOST,
+  GATEWAY_PORT,
+} from '@/lib/smartproxy'
 
 const resend  = new Resend(process.env.RESEND_API_KEY)
 const FROM    = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev'
@@ -13,7 +23,6 @@ function fmt(v: number) {
 export async function POST(req: NextRequest) {
   const { searchParams } = req.nextUrl
 
-  // Validate secret to reject unauthenticated callers
   if (searchParams.get('secret') !== process.env.SYNCPAY_WEBHOOK_SECRET) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
@@ -30,9 +39,10 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => ({}))
+
+  // Webhook OnUpdate payload: { data: { status: 'completed' | ... } }
   const status: string = (body?.data?.status ?? body?.status ?? '') as string
 
-  // Only act on successful payments
   if (status !== 'completed') {
     return NextResponse.json({ ok: true, ignored: true })
   }
@@ -46,34 +56,245 @@ export async function POST(req: NextRequest) {
     .eq('id', meta.uid)
     .single()
 
-  // Record the paid order (best-effort — failure won't block the email)
+  // Idempotency check — prevent duplicate orders from webhook retries
+  const { count: existingOrders } = await supabase
+    .from('orders')
+    .select('id', { count: 'exact', head: true })
+    .eq('client_id', meta.uid)
+    .eq('total_brl', meta.total_brl)
+    .eq('status', 'pago')
+    .gte('paid_at', new Date(Date.now() - 10 * 60 * 1000).toISOString())
+
+  if (existingOrders && existingOrders > 0) {
+    console.log('[webhook] duplicate detected — skipping fulfill for uid:', meta.uid)
+    return NextResponse.json({ ok: true, duplicate: true })
+  }
+
+  // Mark coupon used (only on confirmed payment)
+  if (meta.coupon === 'LUMA10') {
+    supabase.from('clients')
+      .update({ first_purchase_coupon_used: true })
+      .eq('id', meta.uid)
+      .eq('first_purchase_coupon_used', false)
+      .then(({ error }) => { if (error) console.error('[webhook] coupon mark', error) })
+  }
+
+  // Record order (fire-and-forget)
   supabase.from('orders').insert({
     client_id:      meta.uid,
     quantity:       meta.gb,
     total_brl:      meta.total_brl,
-    status:         'paid',
+    status:         'pago',
     payment_method: 'pix',
     paid_at:        new Date().toISOString(),
   }).then(({ error }) => { if (error) console.error('[webhook] order insert', error) })
 
+  // Auto-fulfill via SmartProxy API (or fallback to manual stock)
+  ;(async () => {
+    const smartproxyKey = process.env.SMARTPROXY_APP_KEY
+
+    let proxyHost: string
+    let proxyPort: number
+    let proxyUser: string
+    let proxyPass: string
+    let proxyLabel: string
+    let proxyId: string | undefined
+    let emailGbLimit: number = Number(meta.gb)
+
+    if (smartproxyKey) {
+      // --- SmartProxy auto-provisioning ---
+      proxyUser  = makeUsername(meta.uid)
+      proxyPass  = makePassword()
+      proxyHost  = GATEWAY_HOST
+      proxyPort  = GATEWAY_PORT
+      proxyLabel = `${meta.plan_label} Residencial`
+
+      let isRecharge   = false
+      let newGbLimit   = meta.gb
+      let alreadyUsedGb = 0
+
+      try {
+        const created = await createSubAccount(proxyUser, proxyPass, meta.gb)
+        // SmartProxy prepends "smart-" to usernames — use the actual username from the response
+        if (created.username) proxyUser = created.username
+        // Ensure flow_limit is applied — creation may ignore it
+        await updateSubAccount(proxyUser, { flow_limit: meta.gb, status: 1 })
+      } catch (err: unknown) {
+        // Sub-account already exists = client is recharging
+        const msg = err instanceof Error ? err.message : String(err)
+        console.warn('[webhook] createSubAccount failed (likely recharge):', msg)
+        isRecharge = true
+        try {
+          const actualUser = proxyUser.startsWith('smart-') ? proxyUser : `smart-${proxyUser}`
+          proxyUser = actualUser
+
+          // Read current usage so new limit = already used + newly purchased GB
+          const subAccounts = await listSubAccounts()
+          const existing = subAccounts.find(u => u.username === proxyUser)
+          alreadyUsedGb = existing ? mbToGb(existing.flow_used ?? 0) : 0
+          const newLimit = Math.ceil(alreadyUsedGb) + meta.gb
+          newGbLimit = newLimit
+
+          await updateSubAccount(proxyUser, { status: 1, flow_limit: newLimit })
+        } catch (e2) {
+          console.error('[webhook] SmartProxy provision failed:', e2)
+          sendAdminAlert()
+          return
+        }
+      }
+
+      // On recharge: keep existing password (don't overwrite — SmartProxy still has the old one)
+      // and align gb_limit with the same ceiling logic used for SmartProxy's flow_limit
+      const { data: existingProxy } = await supabase
+        .from('proxies')
+        .select('gb_limit, password')
+        .eq('username', proxyUser)
+        .single()
+
+      if (isRecharge && existingProxy?.password) {
+        proxyPass  = existingProxy.password
+        // newGbLimit already set to Math.ceil(alreadyUsedGb) + meta.gb — matches SmartProxy
+      } else if (!isRecharge) {
+        newGbLimit = meta.gb
+      }
+
+      const { data: inserted, error: upsertErr } = await supabase
+        .from('proxies')
+        .upsert({
+          label:       proxyLabel,
+          host:        proxyHost,
+          port:        proxyPort,
+          username:    proxyUser,
+          password:    proxyPass,
+          gb_limit:    newGbLimit,
+          price:       meta.total_brl,
+          proxy_type:  'residencial',
+          status:      'sold',
+          assigned_to: meta.uid,
+          sold_at:     new Date().toISOString(),
+        }, { onConflict: 'username' })
+        .select('id')
+        .single()
+
+      if (upsertErr) {
+        console.error('[webhook] proxy upsert error:', upsertErr.message)
+      } else {
+        proxyId = inserted?.id
+        emailGbLimit = newGbLimit
+      }
+    } else {
+      // --- Fallback: pick from manual stock ---
+      const { data: stockProxy, error: proxyErr } = await supabase
+        .from('proxies')
+        .select('id,label,host,port,username,password,gb_limit,proxy_type')
+        .eq('status', 'available')
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .single()
+
+      if (proxyErr || !stockProxy) {
+        console.error('[webhook] sem estoque:', proxyErr?.message)
+        sendAdminAlert()
+        return
+      }
+
+      const { error: assignErr } = await supabase
+        .from('proxies')
+        .update({ status: 'sold', assigned_to: meta.uid, sold_at: new Date().toISOString() })
+        .eq('id', stockProxy.id)
+        .eq('status', 'available')
+
+      if (assignErr) {
+        console.error('[webhook] erro ao atribuir proxy:', assignErr.message)
+        return
+      }
+
+      proxyHost  = stockProxy.host
+      proxyPort  = stockProxy.port
+      proxyUser  = stockProxy.username
+      proxyPass  = stockProxy.password
+      proxyLabel = stockProxy.label
+      proxyId    = stockProxy.id
+    }
+
+    // Email com credenciais da proxy
+    if (client?.email) {
+      const name = client.name || client.email.split('@')[0]
+      resend.emails.send({
+        from:    FROM,
+        to:      [client.email],
+        subject: `Sua proxy está pronta — ${meta.plan_label} · Luma Proxys`,
+        html: `<!DOCTYPE html><html lang="pt-BR"><body style="margin:0;padding:40px 20px;background:#08070c;font-family:'Helvetica Neue',Arial,sans-serif;color:#f4f2f8;">
+<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
+<table width="480" cellpadding="0" cellspacing="0" style="max-width:480px;width:100%;">
+  <tr><td style="padding-bottom:24px;text-align:center;">
+    <span style="font-size:20px;font-weight:800;letter-spacing:-.02em;">LUMA<span style="color:#c084fc;">PROXYS</span></span>
+  </td></tr>
+  <tr><td style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:18px;padding:32px 36px;">
+    <h2 style="margin:0 0 8px;font-size:22px;font-weight:700;">Sua proxy está pronta! 🚀</h2>
+    <p style="margin:0 0 24px;font-size:14px;color:rgba(244,242,248,.6);line-height:1.6;">
+      Olá, <b style="color:#f4f2f8;">${name}</b>. Seu pacote <b style="color:#a855f7;">${proxyLabel}</b> foi ativado.
+    </p>
+    <div style="background:#0d0b12;border:1px solid rgba(168,85,247,.25);border-radius:14px;padding:20px 24px;margin-bottom:20px;font-family:'Courier New',monospace;">
+      <table width="100%" cellpadding="7" cellspacing="0" style="font-size:13px;">
+        <tr><td style="color:rgba(244,242,248,.4);width:80px;">Host</td><td style="color:#c084fc;font-weight:700;">${proxyHost}</td></tr>
+        <tr><td style="color:rgba(244,242,248,.4);">Porta HTTP</td><td style="color:#f4f2f8;">${proxyPort}</td></tr>
+        <tr><td style="color:rgba(244,242,248,.4);">Usuário</td><td style="color:#f4f2f8;">${proxyUser}</td></tr>
+        <tr><td style="color:rgba(244,242,248,.4);">Senha</td><td style="color:#f4f2f8;">${proxyPass}</td></tr>
+        <tr><td style="color:rgba(244,242,248,.4);">Cota</td><td style="color:#34d399;font-weight:700;">${emailGbLimit} GB</td></tr>
+      </table>
+    </div>
+    <div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:12px 16px;margin-bottom:24px;font-family:'Courier New',monospace;font-size:12px;color:rgba(244,242,248,.55);word-break:break-all;">
+      ${proxyHost}:${proxyPort}:${proxyUser}:${proxyPass}
+    </div>
+    <a href="${APP_URL}/" style="display:inline-block;background:#a855f7;color:#fff;font-weight:700;font-size:14px;padding:13px 28px;border-radius:12px;text-decoration:none;">
+      Acessar minha conta →
+    </a>
+  </td></tr>
+  <tr><td style="padding-top:20px;text-align:center;font-size:11px;color:rgba(244,242,248,.2);">
+    © 2026 Luma Proxys
+  </td></tr>
+</table></td></tr></table>
+</body></html>`,
+      }).catch(err => console.error('[webhook] credentials email', err))
+    }
+
+    void proxyId  // used for future order linkage
+  })()
+
+  function sendAdminAlert() {
+    const adminEmail = process.env.ADMIN_EMAIL ?? 'ruanpablo2702@gmail.com'
+    resend.emails.send({
+      from:    FROM,
+      to:      [adminEmail],
+      subject: '⚠️ Fulfill falhou — intervenção manual necessária',
+      html: `<p>Um pagamento foi confirmado mas o provisionamento da proxy falhou.</p>
+<p><b>Cliente:</b> ${meta.uid}<br>
+<b>Plano:</b> ${meta.plan_label}<br>
+<b>Valor:</b> R$ ${meta.total_brl.toFixed(2)}</p>
+<p>Verifique os logs do Vercel e provisione manualmente.</p>`,
+    }).catch(e => console.error('[webhook] admin alert', e))
+  }
+
+  // Send confirmation email (fire-and-forget — SyncPay has 5s webhook timeout)
   if (client?.email) {
-    const name        = client.name || client.email.split('@')[0]
-    const couponLine  = meta.coupon
+    const name       = client.name || client.email.split('@')[0]
+    const couponLine = meta.coupon
       ? `<tr><td style="color:rgba(244,242,248,.4);">Cupom</td><td style="color:#34d399;text-align:right;font-family:'Courier New',monospace;">${meta.coupon} · −10%</td></tr>`
       : ''
 
-    await resend.emails.send({
+    resend.emails.send({
       from:    FROM,
       to:      [client.email],
-      subject: `Pagamento confirmado — ${meta.plan_label} · Luma Proxies`,
+      subject: `Pagamento confirmado — ${meta.plan_label} · Luma Proxys`,
       html: `<!DOCTYPE html><html lang="pt-BR"><body style="margin:0;padding:40px 20px;background:#08070c;font-family:'Helvetica Neue',Arial,sans-serif;color:#f4f2f8;">
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
 <table width="480" cellpadding="0" cellspacing="0" style="max-width:480px;width:100%;">
   <tr><td style="padding-bottom:24px;text-align:center;">
-    <span style="font-size:20px;font-weight:800;letter-spacing:-.02em;">LUMA<span style="color:#c084fc;"> PROXIES</span></span>
+    <span style="font-size:20px;font-weight:800;letter-spacing:-.02em;">LUMA<span style="color:#c084fc;">PROXYS</span></span>
   </td></tr>
   <tr><td style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:18px;padding:32px 36px;">
-    <h2 style="margin:0 0 6px;font-size:22px;font-weight:900;">Pagamento confirmado! ✅</h2>
+    <h2 style="margin:0 0 6px;font-size:22px;font-weight:700;">Pagamento confirmado!</h2>
     <p style="margin:0 0 28px;font-size:14px;color:rgba(244,242,248,.55);line-height:1.6;">
       Olá, <b style="color:#f4f2f8;">${name}</b>. Seu PIX foi confirmado e seu acesso está sendo preparado.
     </p>
@@ -90,24 +311,25 @@ export async function POST(req: NextRequest) {
         ${couponLine}
         <tr>
           <td style="color:rgba(244,242,248,.4);">Total pago</td>
-          <td style="color:#a855f7;font-weight:800;font-size:16px;text-align:right;">${fmt(meta.total_brl)}</td>
+          <td style="color:#a855f7;font-weight:700;font-size:16px;text-align:right;">${fmt(meta.total_brl)}</td>
         </tr>
       </table>
     </div>
     <p style="margin:0 0 20px;font-size:13.5px;color:rgba(244,242,248,.5);line-height:1.7;">
-      Em breve você receberá as credenciais da sua proxy por email.<br>Você pode acompanhar seu pedido no dashboard.
+      Em breve você receberá as credenciais da sua proxy por email.
     </p>
-    <a href="${APP_URL}/dashboard" style="display:inline-block;background:#a855f7;color:#fff;font-weight:800;font-size:14px;padding:13px 28px;border-radius:12px;text-decoration:none;">
-      Acessar dashboard →
+    <a href="${APP_URL}/" style="display:inline-block;background:#a855f7;color:#fff;font-weight:700;font-size:14px;padding:13px 28px;border-radius:12px;text-decoration:none;">
+      Acessar minha conta →
     </a>
   </td></tr>
   <tr><td style="padding-top:20px;text-align:center;font-size:11px;color:rgba(244,242,248,.2);">
-    © 2026 Luma Proxies · Dúvidas? Responda este email.
+    © 2026 Luma Proxys · Dúvidas? Responda este email.
   </td></tr>
 </table></td></tr></table>
 </body></html>`,
-    })
+    }).catch(err => console.error('[webhook] email send', err))
   }
 
+  // Respond immediately — SyncPay has a 5-second webhook timeout
   return NextResponse.json({ ok: true })
 }

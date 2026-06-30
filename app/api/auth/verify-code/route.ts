@@ -24,7 +24,11 @@ export async function POST(req: NextRequest) {
     if (!row) return NextResponse.json({ error: 'Código não encontrado.' }, { status: 400 })
     if (row.used) return NextResponse.json({ error: 'Código já utilizado.' }, { status: 400 })
     if (new Date(row.expires_at) < new Date()) return NextResponse.json({ error: 'Código expirado. Solicite um novo.' }, { status: 400 })
-    if (row.code !== code) return NextResponse.json({ error: 'Código incorreto.' }, { status: 400 })
+    if (row.code !== code) {
+      // Invalidate on wrong attempt — prevents brute-force
+      await supabase.from('verification_codes').update({ used: true }).eq('id', row.id)
+      return NextResponse.json({ error: 'Código incorreto. Solicite um novo.' }, { status: 400 })
+    }
 
     // Marca como usado
     await supabase.from('verification_codes').update({ used: true }).eq('id', row.id)

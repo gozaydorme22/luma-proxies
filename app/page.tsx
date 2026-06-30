@@ -45,6 +45,61 @@ function Reveal({ children, delay = 0 }: { children: React.ReactNode; delay?: nu
   )
 }
 
+const NAV_ITEMS = [
+  { href: '#como-funciona', id: 'como-funciona', label: 'Vantagens' },
+  { href: '#planos',        id: 'planos',        label: 'Preços' },
+  { href: '#checker',       id: 'checker',       label: 'Checker' },
+  { href: '#faq',           id: 'faq',           label: 'FAQ' },
+] as const
+
+function NavSections({ activeSection, AC }: { activeSection: string; AC: string }) {
+  const refs = useRef<(HTMLAnchorElement | null)[]>([])
+  const [indicator, setIndicator] = useState({ left: 0, width: 0, opacity: 0 })
+
+  useEffect(() => {
+    const idx = NAV_ITEMS.findIndex(n => n.id === activeSection)
+    const el = refs.current[idx]
+    if (!el) { setIndicator(p => ({ ...p, opacity: 0 })); return }
+    const parent = el.parentElement!.getBoundingClientRect()
+    const rect = el.getBoundingClientRect()
+    setIndicator({ left: rect.left - parent.left, width: rect.width, opacity: 1 })
+  }, [activeSection])
+
+  return (
+    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 26 }}>
+      {NAV_ITEMS.map(({ href, id, label }, i) => (
+        <a
+          key={id}
+          href={href}
+          ref={el => { refs.current[i] = el }}
+          style={{
+            fontSize: 14, fontWeight: 600,
+            color: activeSection === id ? '#fff' : 'rgba(244,242,248,.62)',
+            textDecoration: 'none',
+            transition: 'color .25s ease',
+            paddingBottom: 2,
+          }}
+        >
+          {label}
+        </a>
+      ))}
+      {/* underline deslizante */}
+      <span style={{
+        position: 'absolute',
+        bottom: -6,
+        left: indicator.left,
+        width: indicator.width,
+        height: 2,
+        borderRadius: 2,
+        background: AC,
+        opacity: indicator.opacity,
+        transition: 'left .3s cubic-bezier(.4,0,.2,1), width .3s cubic-bezier(.4,0,.2,1), opacity .2s ease',
+        pointerEvents: 'none',
+      }} />
+    </div>
+  )
+}
+
 export default function LandingPage() {
   const [ips, setIps] = useState(1492750)
   const [rps, setRps] = useState(1240)
@@ -52,6 +107,14 @@ export default function LandingPage() {
   const [user, setUser] = useState<User | null | undefined>(undefined)
   const [modalOpen, setModalOpen]     = useState(false)
   const [modalTab, setModalTab]       = useState<'visao-geral'|'meu-plano'|'conta'>('conta')
+
+  const [modalProxies, setModalProxies]         = useState<Array<{id:string;name:string;host:string;port:number;proxyUser:string;proxyPass:string;status:string;totalGb:number;usedGb:number}>>([])
+  const [modalActiveCount, setModalActiveCount] = useState<number|null>(null)
+  const [modalOrdersCount, setModalOrdersCount] = useState<number|null>(null)
+  const [modalDataLoading, setModalDataLoading] = useState(false)
+  const [modalCopied, setModalCopied]           = useState<string|null>(null)
+  const [modalCheckerMap, setModalCheckerMap]   = useState<Record<string, boolean>>({})
+  const [modalRemoving, setModalRemoving]       = useState<string|null>(null)
 
   const [editName, setEditName]     = useState(false)
   const [newName, setNewName]       = useState('')
@@ -73,6 +136,42 @@ export default function LandingPage() {
     return () => { document.body.style.overflow = '' }
   }, [modalOpen])
 
+  useEffect(() => {
+    if (!modalOpen) { setModalCheckerMap({}); return }
+    async function fetchModalData() {
+      setModalDataLoading(true)
+      try {
+        const [proxRes, orderRes] = await Promise.all([fetch('/api/proxies'), fetch('/api/pedidos')])
+        const proxJson  = proxRes.ok  ? await proxRes.json()  : { proxies: [] }
+        const orderJson = orderRes.ok ? await orderRes.json() : { orders: [] }
+        const myProxies = proxJson.proxies ?? []
+        setModalProxies(myProxies)
+        setModalOrdersCount((orderJson.orders ?? []).length)
+        const toCheck = myProxies.filter((p: {status:string}) => p.status === 'ativa')
+        if (toCheck.length === 0) { setModalActiveCount(0); return }
+        const checkRes = await fetch('/api/proxy-check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ proxies: toCheck.map((p: {host:string;port:number;proxyUser:string;proxyPass:string}) => `${p.host}:${p.port}:${p.proxyUser}:${p.proxyPass}`) }),
+        })
+        if (checkRes.ok) {
+          const results: Array<{status:string}> = await checkRes.json()
+          const map: Record<string,boolean> = {}
+          toCheck.forEach((p: {id:string}, i: number) => { map[p.id] = results[i]?.status === 'success' })
+          setModalCheckerMap(map)
+          setModalActiveCount(Object.values(map).filter(Boolean).length)
+        } else {
+          setModalActiveCount(toCheck.length)
+        }
+      } catch {
+        setModalActiveCount(null); setModalOrdersCount(null)
+      } finally {
+        setModalDataLoading(false)
+      }
+    }
+    fetchModalData()
+  }, [modalOpen])
+
   async function handleSignOut() {
     const { signOut } = await import('@/lib/firebase/auth-actions')
     await signOut()
@@ -85,6 +184,11 @@ export default function LandingPage() {
     setNameSaving(true)
     try {
       await updateProfile(auth.currentUser, { displayName: newName.trim() })
+      await fetch('/api/auth/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName.trim() }),
+      })
       setNameMsg({ text: 'Nome atualizado!', ok: true })
       setEditName(false)
     } catch { setNameMsg({ text: 'Erro ao salvar.', ok: false }) }
@@ -115,6 +219,18 @@ export default function LandingPage() {
   const toggle = (i: number) => setOpen(o => o === i ? -1 : i)
 
   const [checkoutPlan, setCheckoutPlan] = useState<string | null>(null)
+
+  // Open checkout modal if ?checkout=<plan> is in the URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const plan   = params.get('checkout')
+    if (plan) {
+      setCheckoutPlan(['3','5','10','20'].includes(plan) ? plan : '5')
+      const url = new URL(window.location.href)
+      url.searchParams.delete('checkout')
+      window.history.replaceState({}, '', url.toString())
+    }
+  }, [])
 
   // Proxy checker
   const [cInput, setCInput]     = useState('')
@@ -147,12 +263,44 @@ export default function LandingPage() {
     const a = document.createElement('a'); a.href = url; a.download = 'proxies.csv'; a.click(); URL.revokeObjectURL(url)
   }
 
+  const [navOpen, setNavOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20)
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
+
+  const [activeSection, setActiveSection] = useState('')
+  useEffect(() => {
+    const ids = ['como-funciona', 'planos', 'checker', 'faq']
+    const obs = new IntersectionObserver(
+      entries => {
+        entries.forEach(e => { if (e.isIntersecting) setActiveSection(e.target.id) })
+      },
+      { rootMargin: '-40% 0px -55% 0px' }
+    )
+    ids.forEach(id => { const el = document.getElementById(id); if (el) obs.observe(el) })
+    return () => obs.disconnect()
+  }, [])
+
+  const ctaCardRef = useRef<HTMLDivElement>(null)
+  const ctaGlowRef = useRef<HTMLDivElement>(null)
+
+  function handleCtaMouseMove(e: React.MouseEvent<HTMLDivElement>) {
+    const card = ctaCardRef.current
+    const glow = ctaGlowRef.current
+    if (!card || !glow) return
+    const rect = card.getBoundingClientRect()
+    glow.style.left = `${e.clientX - rect.left}px`
+    glow.style.top  = `${e.clientY - rect.top}px`
+    glow.style.opacity = '1'
+  }
+
+  function handleCtaMouseLeave() {
+    const glow = ctaGlowRef.current
+    if (glow) glow.style.opacity = '0'
+  }
 
   const [couponEligible, setCouponEligible] = useState<boolean | null>(null)
   useEffect(() => {
@@ -179,21 +327,23 @@ export default function LandingPage() {
 
 
         {/* NAV — full-width glassmorphism, sem pill */}
-        <nav style={{ width: '100%', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', background: scrolled ? 'rgba(8,7,12,.92)' : 'rgba(8,7,12,.78)', borderBottom: '1px solid rgba(255,255,255,.07)', boxShadow: scrolled ? '0 4px 28px rgba(0,0,0,.4)' : '0 4px 28px rgba(0,0,0,0)', transition: 'background .25s ease, box-shadow .25s ease' }}>
+        <nav style={{ width: '100%', backdropFilter: 'blur(32px) saturate(160%)', WebkitBackdropFilter: 'blur(32px) saturate(160%)', background: scrolled ? 'rgba(8,7,12,.88)' : 'rgba(8,7,12,.55)', borderBottom: `1px solid ${scrolled ? 'rgba(255,255,255,.1)' : 'rgba(255,255,255,.06)'}`, boxShadow: scrolled ? '0 4px 32px rgba(0,0,0,.5), 0 1px 0 rgba(168,85,247,.08)' : 'none', transition: 'background .3s ease, box-shadow .3s ease, border-color .3s ease' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 18, maxWidth: 1180, margin: '0 auto', padding: '13px 20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 11, flexShrink: 0, whiteSpace: 'nowrap' }}>
               <span style={{ display: 'inline-flex', filter: `drop-shadow(0 0 10px color-mix(in srgb,${AC} 70%,transparent))` }}>
                 <svg width="30" height="30" viewBox="0 0 34 34" fill="none"><circle cx="17" cy="17" r="14.5" stroke={AC} strokeWidth="2" opacity=".35"/><path d="M17 2.5a14.5 14.5 0 0 1 0 29" stroke={AC2} strokeWidth="2.6" strokeLinecap="round"/><circle cx="17" cy="17" r="4.6" fill={AC}/></svg>
               </span>
-              <span style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 600, fontSize: 19, letterSpacing: '-.02em' }}>LUMA<span style={{ color: AC2 }}> PROXIES</span></span>
+              <span style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 600, fontSize: 19, letterSpacing: '-.02em' }}>LUMA<span style={{ color: AC2 }}> PROXYS</span></span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 26, fontSize: 14, fontWeight: 600, color: 'rgba(244,242,248,.72)' }}>
-              <a href="#como-funciona" className="nav-link">Como funciona</a>
-              <a href="#planos" className="nav-link">Preços</a>
-              <a href="#faq" className="nav-link">FAQ</a>
-              <a href="#checker" className="nav-link">Checker</a>
-            </div>
+            <div className="nav-sections-wrap"><NavSections activeSection={activeSection} AC={AC} /></div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {/* hamburger — só mobile */}
+              <button className="nav-hamburger-btn" onClick={() => setNavOpen(o => !o)} aria-label="Menu">
+                {navOpen
+                  ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                  : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+                }
+              </button>
               {user === undefined ? null : user ? (
                 <button onClick={() => { setModalTab('visao-geral'); setModalOpen(true) }} className="btn-user">
                   <span style={{ width: 32, height: 32, borderRadius: '50%', background: AC, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: 13, color: '#0a0612', flexShrink: 0, overflow: 'hidden' }}>
@@ -201,34 +351,52 @@ export default function LandingPage() {
                       ? <img src={user.photoURL} width={32} height={32} style={{ objectFit: 'cover', borderRadius: '50%' }} alt="" />
                       : (user.displayName || user.email || '?')[0].toUpperCase()}
                   </span>
-                  <span style={{ fontSize: 13.5, fontWeight: 600, maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <span className="nav-user-name" style={{ fontSize: 13.5, fontWeight: 600, maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {user.displayName || user.email?.split('@')[0]}
                   </span>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: .4 }}><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+                  <svg className="nav-user-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: .4 }}><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
                 </button>
               ) : (
-                <>
-                  <Link href="/login" style={{ fontSize: 14, fontWeight: 600, color: 'rgba(244,242,248,.8)', textDecoration: 'none' }}>Entrar</Link>
+                <div className="nav-auth-desktop" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <Link href="/login?redirect=/" style={{ fontSize: 14, fontWeight: 600, color: 'rgba(244,242,248,.8)', textDecoration: 'none' }}>Entrar</Link>
                   <Link href="/cadastro" className="btn-nav">
                     Começar agora
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
                   </Link>
-                </>
+                </div>
               )}
             </div>
           </div>
         </nav>
+        {/* Mobile menu */}
+        <div className={`nav-mobile-menu${navOpen ? ' open' : ''}`}>
+          {[
+            { href: '#como-funciona', label: 'Vantagens' },
+            { href: '#planos',        label: 'Preços' },
+            { href: '#checker',       label: 'Checker' },
+            { href: '#faq',           label: 'FAQ' },
+          ].map(({ href, label }) => (
+            <a key={href} href={href} className={`nav-mobile-link${activeSection === href.slice(1) ? ' active' : ''}`} onClick={() => setNavOpen(false)}>
+              {label}
+            </a>
+          ))}
+          {!user && (
+            <div style={{ borderTop: '1px solid rgba(255,255,255,.07)', marginTop: 8, paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <a href="/login?redirect=/" className="nav-mobile-link">Entrar</a>
+            </div>
+          )}
+        </div>
       </div>
 
       <div style={{ position: 'relative', zIndex: 2, paddingTop: 60 }}>
 
         {/* HERO */}
-        <header style={{ maxWidth: 1180, margin: '0 auto', padding: '78px 20px 0', display: 'grid', gridTemplateColumns: '1.08fr .92fr', gap: 48, alignItems: 'start' }}>
+        <header className="hero-grid">
           <div style={{ animation: 'lumaRise .7s ease both', textAlign: 'left' }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 9, border: `1px solid color-mix(in srgb,${AC} 30%,transparent)`, background: `color-mix(in srgb,${AC} 10%,transparent)`, borderRadius: 999, padding: '7px 14px', fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, letterSpacing: '.16em', color: AC2, textTransform: 'uppercase' }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#34d399', boxShadow: '0 0 6px #34d399', display: 'inline-block', animation: 'lumaBlink 1.4s infinite' }} />IPs Residenciais Reais · Rotação Automática
+            <div className="hero-badge" style={{ display: 'inline-flex', alignItems: 'center', gap: 9, border: `1px solid color-mix(in srgb,${AC} 30%,transparent)`, background: `color-mix(in srgb,${AC} 10%,transparent)`, borderRadius: 999, padding: '7px 14px', fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, letterSpacing: '.16em', color: AC2, textTransform: 'uppercase' }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#34d399', boxShadow: '0 0 6px #34d399', display: 'inline-block', flexShrink: 0, animation: 'lumaBlink 1.4s infinite' }} />IPs Residenciais Reais · Rotação Automática
             </div>
-            <h1 style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 600, fontSize: 54, lineHeight: 1.0, letterSpacing: '-.025em', margin: '22px 0 0', textAlign: 'left' }}>
+            <h1 className="hero-h1" style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 600, fontSize: 54, lineHeight: 1.0, letterSpacing: '-.025em', margin: '22px 0 0', textAlign: 'left' }}>
               Proxy <span style={{ color: AC }}>Residencial</span><br /><span style={{ color: AC }}>Rotativa</span> Premium
             </h1>
             <p style={{ fontSize: 16, lineHeight: 1.65, color: 'rgba(244,242,248,.6)', maxWidth: 480, margin: '22px 0 0' }}>IPs residenciais reais com rotação automática. Pague só pelo que usar, acompanhe o consumo <b style={{ color: '#f4f2f8' }}>em tempo real</b>.</p>
@@ -259,26 +427,25 @@ export default function LandingPage() {
               ))}
             </div>
 
-            <div className="panel-hover" style={{ marginTop: 26, border: '1px solid rgba(255,255,255,.08)', background: 'rgba(255,255,255,.02)', borderRadius: 16, padding: '16px 18px' }}>
+            <div className="panel-hover hero-trust-panel" style={{ marginTop: 26, border: '1px solid rgba(255,255,255,.08)', background: 'rgba(255,255,255,.02)', borderRadius: 16, padding: '16px 18px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14 }}>
                 <span style={{ color: AC2, letterSpacing: 2 }}>★★★★★</span>
                 <b style={{ color: '#f4f2f8' }}>4,9/5</b><span style={{ color: 'rgba(244,242,248,.45)' }}>· +567 avaliações verificadas</span>
               </div>
               <div style={{ height: 1, background: 'rgba(255,255,255,.06)', margin: '13px 0' }} />
-              <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10.5, letterSpacing: '.13em', color: 'rgba(244,242,248,.5)', textTransform: 'uppercase', display: 'flex', gap: 18 }}>
+              <div className="trust-row" style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10.5, letterSpacing: '.13em', color: 'rgba(244,242,248,.5)', textTransform: 'uppercase', display: 'flex', flexWrap: 'wrap', gap: 18 }}>
                 <span>{'⚡︎'} ATIVAÇÃO IMEDIATA</span>
-                <span style={{ opacity: .3 }}>·</span>
+                <span className="trust-sep" style={{ opacity: .3 }}>·</span>
                 <span>{'🛡︎'} ANTI-DETECÇÃO</span>
-                <span style={{ opacity: .3 }}>·</span>
+                <span className="trust-sep" style={{ opacity: .3 }}>·</span>
                 <span>↻ ROTAÇÃO AUTO</span>
-              </div>
-              <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10.5, letterSpacing: '.13em', color: 'rgba(244,242,248,.5)', textTransform: 'uppercase', marginTop: 8, display: 'flex', gap: 18 }}>
+                <span className="trust-sep" style={{ opacity: .3 }}>·</span>
                 <span>$ PIX</span>
-                <span style={{ opacity: .3 }}>·</span>
+                <span className="trust-sep" style={{ opacity: .3 }}>·</span>
                 <span>₿ CRYPTO</span>
               </div>
               <div style={{ marginTop: 13, paddingTop: 13, borderTop: '1px solid rgba(255,255,255,.06)', fontFamily: "'JetBrains Mono',monospace", fontSize: 11, letterSpacing: '.1em', color: 'rgba(244,242,248,.55)' }}>
-                <span style={{ color: '#34d399' }}>●</span> 99.98% UPTIME — TODOS OS SISTEMAS OPERACIONAIS
+                <span style={{ color: '#34d399' }}>●</span> 99.98% UPTIME
               </div>
             </div>
           </div>
@@ -298,7 +465,7 @@ export default function LandingPage() {
 
 
         {/* HOW IT WORKS */}
-        <section id="como-funciona" style={{ maxWidth: 1000, margin: '0 auto', padding: '96px 20px 0' }}>
+        <section id="como-funciona" style={{ maxWidth: 1000, margin: '0 auto', padding: '72px 20px 0' }}>
           <Reveal>
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, letterSpacing: '.14em', color: AC2, textTransform: 'uppercase' }}>Proxy Residencial Rotativa</div>
@@ -306,7 +473,7 @@ export default function LandingPage() {
               <p style={{ fontSize: 16.5, color: 'rgba(244,242,248,.55)', margin: '14px auto 0', maxWidth: 500 }}>Sem complicação, escolha seu pacote de GB, ative em segundos e navegue com IP residencial real.</p>
             </div>
           </Reveal>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14, marginTop: 46 }}>
+          <div className="cards-3-sm">
             {[
               { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>, title: '+180 Países', desc: 'Geo-targeting por país e por estado no Brasil. Escolha de onde seu IP parece ser.', badge: null },
               { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/></svg>, title: 'Rotação Automática', desc: 'IP troca a cada requisição ou em intervalos configuráveis. Anti-detecção máxima.', badge: 'EXCLUSIVO' },
@@ -318,7 +485,7 @@ export default function LandingPage() {
               <Reveal key={f.title} delay={i * 80}>
                 <div className="card-hover">
                   {f.badge && <span style={{ position: 'absolute', top: 16, right: 16, fontFamily: "'JetBrains Mono',monospace", fontSize: 8.5, letterSpacing: '.1em', background: `color-mix(in srgb,${AC} 20%,transparent)`, color: AC2, padding: '4px 8px', borderRadius: 6 }}>{f.badge}</span>}
-                  <span style={{ display: 'inline-flex', width: 46, height: 46, borderRadius: 12, alignItems: 'center', justifyContent: 'center', background: `color-mix(in srgb,${AC} 14%,transparent)`, color: AC2 }}>{f.icon}</span>
+                  <span style={{ display: 'inline-flex', width: 46, height: 46, borderRadius: 12, alignItems: 'center', justifyContent: 'center', background: `color-mix(in srgb,${AC} 14%,transparent)`, border: `1px solid color-mix(in srgb,${AC} 28%,transparent)`, color: AC2 }}>{f.icon}</span>
                   <h3 style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 600, fontSize: 17, margin: '14px 0 8px' }}>{f.title}</h3>
                   <p style={{ fontSize: 14, lineHeight: 1.55, color: 'rgba(244,242,248,.55)', margin: 0 }}>{f.desc}</p>
                 </div>
@@ -328,7 +495,7 @@ export default function LandingPage() {
         </section>
 
         {/* PRICING */}
-        <section id="planos" style={{ maxWidth: 1180, margin: '0 auto', padding: '96px 20px 0' }}>
+        <section id="planos" style={{ maxWidth: 1180, margin: '0 auto', padding: '72px 20px 0' }}>
           <Reveal>
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, letterSpacing: '.14em', color: AC2, textTransform: 'uppercase' }}>Planos · Residencial Rotativa</div>
@@ -351,9 +518,8 @@ export default function LandingPage() {
             </Reveal>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 12, marginTop: 34 }}>
+          <div className="cards-4">
             {[
-              { gb: '1',  price: 'R$ 6,50',   perGb: 'R$ 6,50/GB',  highlight: false, badge: null },
               { gb: '3',  price: 'R$ 18,90',  perGb: 'R$ 6,30/GB',  highlight: false, badge: null },
               { gb: '5',  price: 'R$ 31,90',  perGb: 'R$ 6,38/GB',  highlight: true,  badge: 'MAIS VENDIDO' },
               { gb: '10', price: 'R$ 60,90',  perGb: 'R$ 6,09/GB',  highlight: false, badge: null },
@@ -390,7 +556,7 @@ export default function LandingPage() {
         </section>
 
         {/* PROXY CHECKER */}
-        <section id="checker" style={{ maxWidth: 980, margin: '0 auto', padding: '96px 20px 0' }}>
+        <section id="checker" style={{ maxWidth: 980, margin: '0 auto', padding: '72px 20px 0' }}>
           <Reveal>
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, letterSpacing: '.14em', color: AC2, textTransform: 'uppercase' }}>Ferramenta gratuita</div>
@@ -402,7 +568,7 @@ export default function LandingPage() {
           <Reveal delay={80}>
             <div className="panel-hover" style={{ marginTop: 36, border: '1px solid rgba(255,255,255,.08)', background: 'rgba(255,255,255,.02)', borderRadius: 18, padding: '22px 24px 24px' }}>
               <label style={{ display: 'block', fontFamily: "'JetBrains Mono',monospace", fontSize: 10.5, letterSpacing: '.14em', color: 'rgba(244,242,248,.4)', textTransform: 'uppercase', marginBottom: 12 }}>
-                Proxies <span style={{ color: 'rgba(244,242,248,.2)' }}>· máx. 50</span>
+                Proxys <span style={{ color: 'rgba(244,242,248,.2)' }}>· máx. 50</span>
               </label>
               <textarea
                 value={cInput}
@@ -501,7 +667,7 @@ export default function LandingPage() {
         </section>
 
         {/* FAQ */}
-        <section id="faq" style={{ maxWidth: 820, margin: '0 auto', padding: '96px 20px 0' }}>
+        <section id="faq" style={{ maxWidth: 820, margin: '0 auto', padding: '72px 20px 0' }}>
           <Reveal>
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, letterSpacing: '.14em', color: AC2, textTransform: 'uppercase' }}>Dúvidas frequentes</div>
@@ -532,8 +698,13 @@ export default function LandingPage() {
         {/* FINAL CTA */}
         <section style={{ maxWidth: 1080, margin: '0 auto', padding: '96px 20px 90px' }}>
           <Reveal>
-            <div style={{ position: 'relative', overflow: 'hidden', border: `1px solid color-mix(in srgb,${AC} 30%,transparent)`, borderRadius: 26, background: `linear-gradient(135deg, color-mix(in srgb,${AC} 16%,transparent), rgba(255,255,255,.01))`, padding: '62px 40px', textAlign: 'center' }}>
-              <div style={{ position: 'absolute', top: -120, left: '50%', transform: 'translateX(-50%)', width: 560, height: 360, background: `radial-gradient(ellipse at center, color-mix(in srgb,${AC} 32%,transparent), transparent 70%)`, filter: 'blur(14px)', pointerEvents: 'none' }} />
+            <div ref={ctaCardRef} className="cta-card" onMouseMove={handleCtaMouseMove} onMouseLeave={handleCtaMouseLeave} style={{ position: 'relative', overflow: 'hidden', border: `1px solid color-mix(in srgb,${AC} 42%,transparent)`, borderRadius: 26, background: `linear-gradient(160deg, color-mix(in srgb,${AC} 18%,transparent) 0%, rgba(255,255,255,.01) 60%)`, textAlign: 'center', boxShadow: `0 0 0 1px color-mix(in srgb,${AC} 8%,transparent), 0 40px 80px color-mix(in srgb,${AC} 14%,transparent)` }}>
+              {/* glow que segue o mouse */}
+              <div ref={ctaGlowRef} style={{ position: 'absolute', width: 560, height: 560, borderRadius: '50%', background: `radial-gradient(circle at center, color-mix(in srgb,${AC} 38%,transparent), transparent 65%)`, transform: 'translate(-50%,-50%)', filter: 'blur(36px)', pointerEvents: 'none', opacity: 0, transition: 'opacity 0.35s ease', zIndex: 0 }} />
+              {/* glow inferior */}
+              <div style={{ position: 'absolute', bottom: -80, left: '50%', transform: 'translateX(-50%)', width: 400, height: 280, background: `radial-gradient(ellipse at center, color-mix(in srgb,${AC} 22%,transparent), transparent 70%)`, filter: 'blur(18px)', pointerEvents: 'none' }} />
+              {/* grid decorativo */}
+              <div style={{ position: 'absolute', inset: 0, backgroundImage: `linear-gradient(rgba(168,85,247,.04) 1px, transparent 1px), linear-gradient(90deg, rgba(168,85,247,.04) 1px, transparent 1px)`, backgroundSize: '48px 48px', pointerEvents: 'none' }} />
               <div style={{ position: 'relative' }}>
                 <h2 style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 600, fontSize: 44, lineHeight: 1.04, letterSpacing: '-.025em', margin: 0 }}>Comece a escalar<br />com a <span style={{ color: AC }}>Luma</span> hoje.</h2>
                 <p style={{ fontSize: 17, color: 'rgba(244,242,248,.6)', margin: '18px auto 0', maxWidth: 460 }}>Sem mensalidade, seus GB nunca expiram. Ativação imediata via PIX ou cripto.</p>
@@ -549,7 +720,7 @@ export default function LandingPage() {
                   )}
                   <a href="#planos" className="btn-secondary" style={{ fontSize: 16, padding: '16px 26px' }}>Ver planos</a>
                 </div>
-                <div style={{ display: 'flex', gap: 24, justifyContent: 'center', flexWrap: 'wrap', marginTop: 26, fontFamily: "'JetBrains Mono',monospace", fontSize: 10.5, letterSpacing: '.12em', color: 'rgba(244,242,248,.45)', textTransform: 'uppercase' }}>
+                <div className="cta-trust-row" style={{ display: 'flex', gap: 24, justifyContent: 'center', flexWrap: 'wrap', marginTop: 26, fontFamily: "'JetBrains Mono',monospace", fontSize: 10.5, letterSpacing: '.12em', color: 'rgba(244,242,248,.45)', textTransform: 'uppercase' }}>
                   <span>{'⚡︎'} Ativação imediata</span><span>$ PIX · ₿ Cripto</span><span>↻ Suporte 24/7</span>
                 </div>
               </div>
@@ -560,16 +731,16 @@ export default function LandingPage() {
         {/* FOOTER */}
         <Reveal>
           <footer style={{ borderTop: '1px solid rgba(255,255,255,.07)', background: 'rgba(0,0,0,.3)' }}>
-            <div style={{ maxWidth: 1180, margin: '0 auto', padding: '54px 20px 30px', display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr', gap: 36 }}>
+            <div className="footer-grid">
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <svg width="26" height="26" viewBox="0 0 34 34" fill="none"><circle cx="17" cy="17" r="14.5" stroke={AC} strokeWidth="2" opacity=".35"/><path d="M17 2.5a14.5 14.5 0 0 1 0 29" stroke={AC2} strokeWidth="2.6" strokeLinecap="round"/><circle cx="17" cy="17" r="4.6" fill={AC}/></svg>
-                  <span style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 600, fontSize: 17 }}>LUMA<span style={{ color: AC2 }}> PROXIES</span></span>
+                  <span style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 600, fontSize: 17 }}>LUMA<span style={{ color: AC2 }}> PROXYS</span></span>
                 </div>
-                <p style={{ fontSize: 13.5, lineHeight: 1.6, color: 'rgba(244,242,248,.5)', margin: '14px 0 0', maxWidth: 280 }}>Proxies residenciais rotativas premium em +180 países. Setup em segundos, GB nunca expira.</p>
+                <p style={{ fontSize: 13.5, lineHeight: 1.6, color: 'rgba(244,242,248,.5)', margin: '14px 0 0', maxWidth: 280 }}>Proxys residenciais rotativas premium. Ativação imediata, seus GB nunca expiram.</p>
               </div>
               {[
-                { title: 'Planos', links: ['1 GB — R$ 6,50', '3 GB — R$ 18,90', '5 GB — R$ 31,90', '10 GB — R$ 60,90', '20 GB — R$ 120,90'] },
+                { title: 'Planos', links: ['3 GB — R$ 18,90', '5 GB — R$ 31,90', '10 GB — R$ 60,90', '20 GB — R$ 120,90'] },
                 { title: 'Empresa', links: ['Afiliados', 'FAQ', 'Suporte', 'Termos'] },
                 { title: 'Contato', links: ['WhatsApp', 'Telegram', 'Instagram', 'E-mail'] },
               ].map(col => (
@@ -582,7 +753,7 @@ export default function LandingPage() {
               ))}
             </div>
             <div style={{ maxWidth: 1180, margin: '0 auto', padding: 20, borderTop: '1px solid rgba(255,255,255,.06)', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, fontSize: 12.5, color: 'rgba(244,242,248,.4)' }}>
-              <span>© 2026 Luma Proxies. Todos os direitos reservados.</span>
+              <span>© 2026 Luma Proxys. Todos os direitos reservados.</span>
               <span style={{ fontFamily: "'JetBrains Mono',monospace", letterSpacing: '.08em' }}><span style={{ color: '#34d399' }}>●</span> Todos os sistemas operacionais</span>
             </div>
           </footer>
@@ -654,38 +825,99 @@ export default function LandingPage() {
                 {modalTab === 'visao-geral' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                     {[
-                      { label: 'Proxies ativas', val: '—', color: AC },
-                      { label: 'GB consumidos (30d)', val: '—', color: '#f4f2f8' },
-                      { label: 'GB disponíveis', val: '—', color: '#34d399' },
-                      { label: 'Pedidos realizados', val: '—', color: '#f4f2f8' },
+                      { label: 'Proxys ativas', val: modalDataLoading ? '...' : modalActiveCount !== null ? String(modalActiveCount) : '—', color: AC },
+                      { label: 'Pedidos realizados', val: modalDataLoading ? '...' : modalOrdersCount !== null ? String(modalOrdersCount) : '—', color: '#f4f2f8' },
                     ].map(s => (
                       <div key={s.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid rgba(255,255,255,.07)', borderRadius: 12, padding: '13px 16px' }}>
                         <span style={{ fontSize: 13.5, color: 'rgba(244,242,248,.55)' }}>{s.label}</span>
                         <span style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 600, fontSize: 18, color: s.color }}>{s.val}</span>
                       </div>
                     ))}
-                    <Link href="/dashboard" onClick={() => setModalOpen(false)} className="btn-modal-primary" style={{ marginTop: 4 }}>
-                      Ir para o dashboard <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-                    </Link>
                   </div>
                 )}
 
                 {modalTab === 'meu-plano' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    <div style={{ border: `1px solid color-mix(in srgb,${AC} 22%,transparent)`, borderRadius: 14, padding: '18px 20px', background: `color-mix(in srgb,${AC} 8%,transparent)` }}>
-                      <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, letterSpacing: '.14em', color: AC2, textTransform: 'uppercase' }}>Plano atual</div>
-                      <div style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 900, fontSize: 24, marginTop: 6 }}>Free</div>
-                      <div style={{ fontSize: 13, color: 'rgba(244,242,248,.5)', marginTop: 4 }}>Sem GB ativo. Adicione saldo para começar.</div>
-                    </div>
-                    {[['Tipo de proxy','Residencial Rotativa'],['GB ativo','0 GB'],['Validade','Não expira'],['Região padrão','Brasil']].map(([k,v]) => (
-                      <div key={k} style={{ display: 'flex', justifyContent: 'space-between', border: '1px solid rgba(255,255,255,.07)', borderRadius: 11, padding: '12px 16px', fontSize: 13.5 }}>
-                        <span style={{ color: 'rgba(244,242,248,.5)' }}>{k}</span>
-                        <span style={{ fontWeight: 600, color: '#f4f2f8' }}>{v}</span>
-                      </div>
-                    ))}
-                    <Link href="/dashboard/recarga" onClick={() => setModalOpen(false)} className="btn-modal-primary">
-                      Recarregar saldo <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-                    </Link>
+                    {modalDataLoading ? (
+                      <div style={{ textAlign: 'center', padding: '28px 0', color: 'rgba(244,242,248,.35)', fontSize: 13 }}>Carregando...</div>
+                    ) : modalProxies.length === 0 ? (
+                      <>
+                        <div style={{ border: `1px solid color-mix(in srgb,${AC} 22%,transparent)`, borderRadius: 14, padding: '18px 20px', background: `color-mix(in srgb,${AC} 8%,transparent)` }}>
+                          <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, letterSpacing: '.14em', color: AC2, textTransform: 'uppercase' }}>Plano atual</div>
+                          <div style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 900, fontSize: 22, marginTop: 6 }}>Sem proxies</div>
+                          <div style={{ fontSize: 13, color: 'rgba(244,242,248,.5)', marginTop: 4 }}>Nenhuma proxy atribuída à sua conta ainda.</div>
+                        </div>
+                      </>
+                    ) : modalProxies.map(proxy => {
+                      const connStr     = `${proxy.host}:${proxy.port}:${proxy.proxyUser}:${proxy.proxyPass}`
+                      const isCopied    = modalCopied === proxy.id
+                      const checkerDone = proxy.id in modalCheckerMap
+                      const isAlive     = checkerDone ? modalCheckerMap[proxy.id] : proxy.status === 'ativa'
+                      const isRemoving  = modalRemoving === proxy.id
+                      const pct         = proxy.totalGb > 0 ? Math.min(100, Math.round((proxy.usedGb / proxy.totalGb) * 100)) : 0
+                      const barColor    = pct >= 95 ? '#f87171' : pct >= 75 ? '#fbbf24' : '#34d399'
+                      return (
+                        <div key={proxy.id} style={{ border: `1px solid color-mix(in srgb,${isAlive ? AC : '#f87171'} 20%,rgba(255,255,255,.06))`, borderRadius: 14, overflow: 'hidden' }}>
+                          <div style={{ padding: '12px 16px', background: `color-mix(in srgb,${isAlive ? AC : '#f87171'} 5%,transparent)`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <div>
+                              <div style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 700, fontSize: 13.5, color: '#f4f2f8' }}>{proxy.name || proxy.host}</div>
+                              <div style={{ fontSize: 11, color: 'rgba(244,242,248,.4)', marginTop: 1 }}>Proxy Residencial Rotativa</div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: isAlive ? 'rgba(52,211,153,.12)' : 'rgba(248,113,113,.1)', border: `1px solid ${isAlive ? 'rgba(52,211,153,.25)' : 'rgba(248,113,113,.2)'}`, borderRadius: 999, padding: '3px 9px', fontSize: 10.5, fontWeight: 700, color: isAlive ? '#34d399' : '#f87171', fontFamily: "'JetBrains Mono',monospace" }}>
+                                <span style={{ width: 4, height: 4, borderRadius: '50%', background: isAlive ? '#34d399' : '#f87171', display: 'inline-block' }} />
+                                {checkerDone ? (isAlive ? 'ativa' : 'inativa') : proxy.status}
+                              </div>
+                              {checkerDone && !isAlive && (
+                                <button
+                                  disabled={isRemoving}
+                                  onClick={async () => {
+                                    if (!confirm('Remover esta proxy inativa?')) return
+                                    setModalRemoving(proxy.id)
+                                    try {
+                                      const r = await fetch(`/api/proxies/${proxy.id}`, { method: 'DELETE' })
+                                      if (r.ok) setModalProxies(prev => prev.filter(p => p.id !== proxy.id))
+                                      else { const d = await r.json(); alert(d.error ?? 'Erro ao remover.') }
+                                    } finally { setModalRemoving(null) }
+                                  }}
+                                  style={{ background: 'rgba(248,113,113,.15)', border: '1px solid rgba(248,113,113,.3)', borderRadius: 7, padding: '4px 9px', color: '#f87171', cursor: 'pointer', fontSize: 10.5, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace", opacity: isRemoving ? .5 : 1 }}
+                                >
+                                  {isRemoving ? '...' : 'Remover'}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          <div style={{ padding: '10px 16px', borderTop: '1px solid rgba(255,255,255,.05)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'rgba(244,242,248,.38)', marginBottom: 5, fontFamily: "'JetBrains Mono',monospace", letterSpacing: '.1em', textTransform: 'uppercase' }}>
+                              <span>Uso de GB</span>
+                              <span>{proxy.usedGb.toFixed(2)} / {proxy.totalGb} GB</span>
+                            </div>
+                            <div style={{ height: 5, borderRadius: 3, background: 'rgba(255,255,255,.07)', overflow: 'hidden', marginBottom: 3 }}>
+                              <div style={{ height: '100%', width: `${pct}%`, borderRadius: 3, background: `linear-gradient(90deg,${barColor},${barColor}aa)` }} />
+                            </div>
+                            <div style={{ fontSize: 10, color: 'rgba(244,242,248,.3)', textAlign: 'right' }}>{pct}% usado</div>
+                          </div>
+                          <div style={{ padding: '12px 16px', borderTop: '1px solid rgba(255,255,255,.05)' }}>
+                            <div style={{ fontSize: 9.5, fontFamily: "'JetBrains Mono',monospace", letterSpacing: '.12em', color: 'rgba(244,242,248,.3)', textTransform: 'uppercase', marginBottom: 7 }}>Credenciais de conexão</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                              <div style={{ flex: 1, background: 'rgba(0,0,0,.3)', border: '1px solid rgba(255,255,255,.07)', borderRadius: 9, padding: '9px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: 'rgba(244,242,248,.7)', wordBreak: 'break-all', lineHeight: 1.5 }}>{connStr}</div>
+                              <button onClick={() => { navigator.clipboard.writeText(connStr).then(() => { setModalCopied(proxy.id); setTimeout(() => setModalCopied(null), 2000) }) }}
+                                style={{ flexShrink: 0, background: isCopied ? 'rgba(52,211,153,.15)' : 'rgba(168,85,247,.15)', border: `1px solid ${isCopied ? 'rgba(52,211,153,.3)' : 'rgba(168,85,247,.3)'}`, borderRadius: 9, padding: '9px 12px', color: isCopied ? '#34d399' : AC, cursor: 'pointer', fontSize: 10.5, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace", whiteSpace: 'nowrap' }}>
+                                {isCopied ? 'Copiado!' : 'Copiar'}
+                              </button>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                              {[['Host', proxy.host], ['Porta', String(proxy.port)], ['Usuário', proxy.proxyUser], ['Senha', proxy.proxyPass]].map(([k, v]) => (
+                                <div key={k} style={{ background: 'rgba(0,0,0,.2)', borderRadius: 7, padding: '7px 10px' }}>
+                                  <div style={{ fontSize: 9, color: 'rgba(244,242,248,.28)', fontFamily: "'JetBrains Mono',monospace", letterSpacing: '.1em', textTransform: 'uppercase', marginBottom: 2 }}>{k}</div>
+                                  <div style={{ fontSize: 11, color: '#f4f2f8', fontFamily: "'JetBrains Mono',monospace", wordBreak: 'break-all' }}>{v}</div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
 

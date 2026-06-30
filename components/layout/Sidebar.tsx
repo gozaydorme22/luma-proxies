@@ -11,7 +11,7 @@ import {
 const NAV_ITEMS = [
   { label: 'Proxies',   href: '/dashboard/proxies',  icon: Globe },
   { label: 'Consumo',   href: '/dashboard/consumo',  icon: Zap },
-  { label: 'Recarga',   href: '/dashboard/recarga',  icon: ShoppingCart },
+  { label: 'Recarga',   href: '/dashboard?checkout=1',  icon: ShoppingCart },
   { label: 'Pedidos',   href: '/dashboard/pedidos',  icon: Clock },
 ]
 
@@ -37,7 +37,7 @@ export function Sidebar({ isAdmin, userName, userEmail }: SidebarProps) {
       {/* Logo */}
       <div className="h-16 flex items-center px-6 border-b border-(--border)">
         <span className="text-base font-black tracking-tight text-(--text)">
-          LUMA<span className="text-(--ac)">.</span>PROXIES
+          LUMA<span className="text-(--ac)"> PROXYS</span>
         </span>
         {isAdmin && (
           <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-md bg-(--ac)/15 text-(--ac) font-semibold border border-(--border-hi)">
@@ -71,7 +71,7 @@ export function Sidebar({ isAdmin, userName, userEmail }: SidebarProps) {
         {/* link cruzado admin↔cliente */}
         <div className="mt-auto pt-4 border-t border-(--border)">
           {isAdmin ? (
-            <Link href="/dashboard" className="flex items-center gap-3 h-9 px-3 rounded-xl text-sm text-(--text-muted) hover:text-(--text) hover:bg-white/4 transition-all">
+            <Link href="/" className="flex items-center gap-3 h-9 px-3 rounded-xl text-sm text-(--text-muted) hover:text-(--text) hover:bg-white/4 transition-all">
               <Globe size={16} />
               Ver como cliente
             </Link>

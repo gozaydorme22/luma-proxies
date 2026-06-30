@@ -1,49 +1,92 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { DashboardShell } from '@/components/layout/DashboardShell'
 import { TopBar } from '@/components/layout/TopBar'
 import { Card } from '@/components/ui/Card'
 import { Badge, statusVariant } from '@/components/ui/Badge'
-import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Search } from 'lucide-react'
 
-const ORDERS = [
-  { id: '#0042', client: 'João Silva',   email: 'joao@email.com',  product: 'Residencial 10GB', qty: '10 GB', total: 'R$ 49,90',  status: 'pago',     date: '23/06/2026' },
-  { id: '#0041', client: 'Maria Souza',  email: 'maria@email.com', product: 'Mobile 5GB',       qty: '5 GB',  total: 'R$ 29,90',  status: 'pago',     date: '22/06/2026' },
-  { id: '#0040', client: 'Pedro Lima',   email: 'pedro@email.com', product: 'CPA 50GB',         qty: '50 GB', total: 'R$ 89,90',  status: 'pendente', date: '21/06/2026' },
-  { id: '#0039', client: 'Ana Costa',    email: 'ana@email.com',   product: 'IPv4 x5',          qty: '5 un',  total: 'R$ 150,00', status: 'pago',     date: '20/06/2026' },
-  { id: '#0038', client: 'Lucas Mendes', email: 'lucas@email.com', product: 'Residencial 10GB', qty: '10 GB', total: 'R$ 49,90',  status: 'cancelado',date: '19/06/2026' },
-]
+interface Order {
+  id: string
+  clientName: string
+  clientEmail: string
+  quantity: number
+  totalBrl: number
+  status: string
+  paymentMethod: string
+  paidAt: string | null
+  createdAt: string
+}
+
+function fmtBRL(n: number) {
+  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleDateString('pt-BR')
+}
+
+function statusLabel(s: string) {
+  const map: Record<string, string> = {
+    pago: 'Pago', aguardando_pagamento: 'Pendente',
+    cancelado: 'Cancelado', reembolsado: 'Reembolsado',
+  }
+  return map[s] ?? s
+}
 
 const STATUS_OPTS = [
   { value: '', label: 'Todos' },
   { value: 'pago', label: 'Pago' },
-  { value: 'pendente', label: 'Pendente' },
+  { value: 'aguardando_pagamento', label: 'Pendente' },
   { value: 'cancelado', label: 'Cancelado' },
 ]
 
-function statusLabel(s: string) {
-  const map: Record<string, string> = { pago: 'Pago', pendente: 'Pendente', cancelado: 'Cancelado', reembolsado: 'Reembolsado' }
-  return map[s] ?? s
-}
-
 export default function AdminPedidosPage() {
-  const [search, setSearch]     = useState('')
-  const [filterS, setFilterS]   = useState('')
+  const [orders, setOrders]       = useState<Order[]>([])
+  const [loading, setLoading]     = useState(true)
+  const [search, setSearch]       = useState('')
+  const [filterS, setFilterS]     = useState('')
+  const [cancelling, setCancelling] = useState<string | null>(null)
 
-  const filtered = ORDERS.filter(o => {
+  function loadOrders() {
+    fetch('/api/admin/orders')
+      .then(r => r.json())
+      .then(d => setOrders(Array.isArray(d) ? d : []))
+      .catch(() => setOrders([]))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { loadOrders() }, [])
+
+  async function handleCancel(id: string) {
+    if (!confirm('Cancelar este pedido? A proxy será devolvida ao estoque.')) return
+    setCancelling(id)
+    try {
+      const res = await fetch(`/api/admin/orders/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'cancelado' }),
+      })
+      if (res.ok) loadOrders()
+      else { const d = await res.json(); alert(d.error ?? 'Erro ao cancelar.') }
+    } finally {
+      setCancelling(null)
+    }
+  }
+
+  const filtered = orders.filter(o => {
     const q = search.toLowerCase()
-    if (q && !o.client.toLowerCase().includes(q) && !o.id.includes(q) && !o.email.includes(q)) return false
+    if (q && !o.clientName.toLowerCase().includes(q) && !o.clientEmail.toLowerCase().includes(q) && !o.id.toLowerCase().includes(q)) return false
     if (filterS && o.status !== filterS) return false
     return true
   })
 
   return (
     <DashboardShell isAdmin userName="Admin">
-      <TopBar title="Pedidos" sub={`${ORDERS.length} pedidos no total`} />
+      <TopBar title="Pedidos" sub={loading ? 'Carregando...' : `${orders.length} pedidos no total`} />
       <div className="p-6 flex flex-col gap-4">
         <div className="flex gap-3">
           <div className="flex-1">
@@ -60,40 +103,48 @@ export default function AdminPedidosPage() {
         </div>
 
         <Card padded={false}>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-(--border)">
-                {['ID', 'Cliente', 'Produto', 'Qtd', 'Total', 'Data', 'Status', ''].map(h => (
-                  <th key={h} className="text-left text-xs font-medium text-(--text-faint) px-4 py-3">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(o => (
-                <tr key={o.id} className="border-b border-(--border) last:border-0 hover:bg-white/2 transition-colors">
-                  <td className="px-4 py-3 font-mono text-xs text-(--text-faint)">{o.id}</td>
-                  <td className="px-4 py-3">
-                    <p className="text-sm text-(--text)">{o.client}</p>
-                    <p className="text-xs text-(--text-faint)">{o.email}</p>
-                  </td>
-                  <td className="px-4 py-3 text-(--text-muted)">{o.product}</td>
-                  <td className="px-4 py-3 text-(--text-muted)">{o.qty}</td>
-                  <td className="px-4 py-3 font-semibold text-(--text)">{o.total}</td>
-                  <td className="px-4 py-3 text-(--text-faint) text-xs">{o.date}</td>
-                  <td className="px-4 py-3">
-                    <Badge variant={statusVariant(o.status)} dot>{statusLabel(o.status)}</Badge>
-                  </td>
-                  <td className="px-4 py-3">
-                    {o.status === 'pendente' && (
-                      <Button variant="secondary" size="sm" className="text-(--green) border-(--green)/30 hover:bg-(--green)/10">Confirmar</Button>
-                    )}
-                  </td>
+          {loading ? (
+            <p className="text-center text-(--text-faint) text-sm py-10">Carregando...</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-(--border)">
+                  {['ID', 'Cliente', 'Produto', 'Total', 'Data', 'Status', ''].map(h => (
+                    <th key={h} className="text-left text-xs font-medium text-(--text-faint) px-4 py-3">{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          {filtered.length === 0 && (
-            <p className="text-center text-(--text-faint) text-sm py-10">Nenhum pedido encontrado.</p>
+              </thead>
+              <tbody>
+                {filtered.length === 0 ? (
+                  <tr><td colSpan={6} className="text-center text-(--text-faint) py-10">Nenhum pedido encontrado.</td></tr>
+                ) : filtered.map(o => (
+                  <tr key={o.id} className="border-b border-(--border) last:border-0 hover:bg-white/2 transition-colors">
+                    <td className="px-4 py-3 font-mono text-xs text-(--text-faint)">{o.id.slice(0, 8)}</td>
+                    <td className="px-4 py-3">
+                      <p className="text-sm text-(--text)">{o.clientName}</p>
+                      <p className="text-xs text-(--text-faint)">{o.clientEmail}</p>
+                    </td>
+                    <td className="px-4 py-3 text-(--text-muted)">Proxy Residencial Rotativa · {o.quantity}GB</td>
+                    <td className="px-4 py-3 font-semibold text-(--text)">{fmtBRL(o.totalBrl)}</td>
+                    <td className="px-4 py-3 text-(--text-faint) text-xs">{fmtDate(o.createdAt)}</td>
+                    <td className="px-4 py-3">
+                      <Badge variant={statusVariant(o.status)} dot>{statusLabel(o.status)}</Badge>
+                    </td>
+                    <td className="px-4 py-3">
+                      {o.status !== 'cancelado' && o.status !== 'reembolsado' && (
+                        <button
+                          onClick={() => handleCancel(o.id)}
+                          disabled={cancelling === o.id}
+                          className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-(--red)/30 text-(--red) hover:bg-(--red)/10 transition-colors disabled:opacity-40 cursor-pointer"
+                        >
+                          {cancelling === o.id ? '...' : 'Cancelar'}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </Card>
       </div>

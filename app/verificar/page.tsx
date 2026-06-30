@@ -65,10 +65,20 @@ export default function VerificarPage() {
       const user = auth.currentUser
       if (user) {
         const newToken = await user.getIdToken(true)
-        document.cookie = `__session=${newToken}; path=/; max-age=3600; SameSite=Strict`
+        await fetch('/api/auth/session', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ token: newToken }),
+        })
+        // Insere cliente no banco (ignora se já existir — 23505)
+        await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: user.displayName ?? '', email: user.email ?? '' }),
+        }).catch(() => null)
       }
 
-      router.replace('/dashboard')
+      router.replace('/')
     } catch {
       setError('Erro de conexão. Tente novamente.')
       setLoading(false)
@@ -111,7 +121,7 @@ export default function VerificarPage() {
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <Link href="/" style={{ textDecoration: 'none' }}>
             <span style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 800, fontSize: 22, letterSpacing: '-.02em', color: '#f4f2f8' }}>
-              LUMA<span style={{ color: AC2 }}> PROXIES</span>
+              LUMA<span style={{ color: AC2 }}> PROXYS</span>
             </span>
           </Link>
         </div>
@@ -139,6 +149,7 @@ export default function VerificarPage() {
                 <input
                   key={i}
                   ref={el => { inputs.current[i] = el }}
+                  className="otp-input"
                   type="text"
                   inputMode="numeric"
                   maxLength={1}
@@ -150,7 +161,7 @@ export default function VerificarPage() {
                     fontSize: 24, fontWeight: 800, fontFamily: "'JetBrains Mono',monospace",
                     background: d ? `color-mix(in srgb,${AC} 12%,rgba(255,255,255,.04))` : 'rgba(255,255,255,.04)',
                     border: `1.5px solid ${d ? `color-mix(in srgb,${AC} 50%,transparent)` : 'rgba(255,255,255,.1)'}`,
-                    color: '#f4f2f8', outline: 'none', transition: 'border-color .15s, background .15s',
+                    color: '#f4f2f8', outline: 'none', transition: 'border-color .15s, background .15s, box-shadow .15s',
                   }}
                 />
               ))}

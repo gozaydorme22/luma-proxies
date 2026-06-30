@@ -35,17 +35,17 @@ export async function POST(req: NextRequest) {
   const name       = client.name || client.email.split('@')[0]
   const fmtBrl     = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
   const methodLabel = method === 'pix' ? 'PIX' : 'Criptomoeda'
-  const dashUrl    = `${APP_URL}/dashboard`
+  const dashUrl    = `${APP_URL}/`
 
   await resend.emails.send({
     from:    FROM,
     to:      [client.email],
-    subject: `Compra confirmada — ${plan_label} · Luma Proxies`,
+    subject: `Compra confirmada — ${plan_label} · Luma Proxys`,
     html: `<!DOCTYPE html><html lang="pt-BR"><body style="margin:0;padding:40px 20px;background:#08070c;font-family:'Helvetica Neue',Arial,sans-serif;color:#f4f2f8;">
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
 <table width="480" cellpadding="0" cellspacing="0" style="max-width:480px;width:100%;">
   <tr><td style="padding-bottom:24px;text-align:center;">
-    <span style="font-size:20px;font-weight:800;letter-spacing:-.02em;">LUMA<span style="color:#c084fc;"> PROXIES</span></span>
+    <span style="font-size:20px;font-weight:800;letter-spacing:-.02em;">LUMA<span style="color:#c084fc;" > PROXYS</span></span>
   </td></tr>
   <tr><td style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:18px;padding:32px 36px;">
     <h2 style="margin:0 0 6px;font-size:22px;font-weight:900;">Compra confirmada! ✅</h2>
@@ -76,15 +76,15 @@ export async function POST(req: NextRequest) {
 
     <p style="margin:0 0 20px;font-size:13.5px;color:rgba(244,242,248,.5);line-height:1.7;">
       Assim que o pagamento for confirmado, sua proxy será ativada e você receberá todas as credenciais por email.<br><br>
-      Você também pode acompanhar seu pedido diretamente no dashboard:
+      Assim que o pagamento for confirmado, sua proxy será ativada e você receberá todas as credenciais por email.
     </p>
 
     <a href="${dashUrl}" style="display:inline-block;background:#a855f7;color:#0a0612;font-weight:800;font-size:14px;padding:13px 28px;border-radius:12px;text-decoration:none;">
-      Acessar dashboard →
+      Acessar minha conta →
     </a>
   </td></tr>
   <tr><td style="padding-top:20px;text-align:center;font-size:11px;color:rgba(244,242,248,.2);">
-    © 2026 Luma Proxies · Dúvidas? Responda este email.
+    © 2026 Luma Proxys · Dúvidas? Responda este email.
   </td></tr>
 </table></td></tr></table>
 </body></html>`,

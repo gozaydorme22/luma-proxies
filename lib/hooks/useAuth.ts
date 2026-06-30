@@ -14,11 +14,14 @@ export function useAuth() {
       setLoading(false)
 
       if (u) {
-        // Atualiza o cookie __session a cada mudança de estado
         const token = await u.getIdToken()
-        document.cookie = `__session=${token}; path=/; max-age=3600; SameSite=Strict`
+        fetch('/api/auth/session', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ token }),
+        }).catch(() => {})
       } else {
-        document.cookie = '__session=; path=/; max-age=0'
+        fetch('/api/auth/session', { method: 'DELETE' }).catch(() => {})
       }
     })
   }, [])
