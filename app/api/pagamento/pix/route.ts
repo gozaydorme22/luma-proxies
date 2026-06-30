@@ -45,6 +45,7 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (!client?.email) {
+    console.error('[pix] cliente não encontrado para uid:', uid)
     return NextResponse.json({ error: 'Cliente não encontrado.' }, { status: 404 })
   }
 
