@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["undici"],
+  serverExternalPackages: ["https-proxy-agent"],
 };
 
 export default nextConfig;

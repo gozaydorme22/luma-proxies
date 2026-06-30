@@ -1,5 +1,5 @@
-import https from 'https'
-import { HttpProxyAgent } from 'http-proxy-agent'
+import https from 'node:https'
+import { HttpsProxyAgent } from 'https-proxy-agent'
 
 const BASE         = 'https://www.smartproxy.org/web_v1'
 const APP_KEY      = process.env.SMARTPROXY_APP_KEY ?? ''
@@ -14,21 +14,21 @@ interface SimpleResponse {
   json(): Promise<unknown>
 }
 
-function makeProxyAgent(): HttpProxyAgent<string> | null {
+function makeProxyAgent(): HttpsProxyAgent<string> | null {
   const user = process.env.SMARTPROXY_ROUTING_USER ?? ''
   const pass = process.env.SMARTPROXY_ROUTING_PASS ?? ''
   if (!user || !pass) {
     console.log('[smartproxy] proxy routing: disabled (no credentials)')
     return null
   }
-  console.log('[smartproxy] proxy routing: enabled via http-proxy-agent')
-  return new HttpProxyAgent(`http://${user}:${pass}@${GATEWAY_HOST}:${GATEWAY_PORT}`)
+  console.log('[smartproxy] proxy routing: enabled via https-proxy-agent (CONNECT)')
+  return new HttpsProxyAgent(`http://${user}:${pass}@${GATEWAY_HOST}:${GATEWAY_PORT}`)
 }
 
 function nodeRequest(
   url: string,
   init: { method?: string; headers?: Record<string, string>; body?: string },
-  agent: HttpProxyAgent<string>,
+  agent: HttpsProxyAgent<string>,
 ): Promise<SimpleResponse> {
   return new Promise((resolve, reject) => {
     const u     = new URL(url)
