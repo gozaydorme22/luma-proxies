@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { Resend } from 'resend'
 import {
@@ -39,8 +39,6 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => ({}))
-
-  // Webhook OnUpdate payload: { data: { status: 'completed' | ... } }
   const status: string = (body?.data?.status ?? body?.status ?? '') as string
 
   if (status !== 'completed') {
@@ -49,14 +47,7 @@ export async function POST(req: NextRequest) {
 
   const supabase = createServerClient()
 
-  // Fetch client for email
-  const { data: client } = await supabase
-    .from('clients')
-    .select('email, name')
-    .eq('id', meta.uid)
-    .single()
-
-  // Idempotency check — prevent duplicate orders from webhook retries
+  // Idempotency check
   const { count: existingOrders } = await supabase
     .from('orders')
     .select('id', { count: 'exact', head: true })
@@ -66,33 +57,44 @@ export async function POST(req: NextRequest) {
     .gte('paid_at', new Date(Date.now() - 10 * 60 * 1000).toISOString())
 
   if (existingOrders && existingOrders > 0) {
-    console.log('[webhook] duplicate detected — skipping fulfill for uid:', meta.uid)
+    console.log('[webhook] duplicate — skipping uid:', meta.uid)
     return NextResponse.json({ ok: true, duplicate: true })
   }
 
-  // Mark coupon used (only on confirmed payment)
-  if (meta.coupon === 'LUMA10') {
-    supabase.from('clients')
-      .update({ first_purchase_coupon_used: true })
+  // Schedule all async work to run AFTER the response is sent
+  // (keeps Vercel function alive until provisioning + email complete)
+  after(async () => {
+    const supabase = createServerClient()
+
+    // Fetch client for email
+    const { data: client } = await supabase
+      .from('clients')
+      .select('email, name')
       .eq('id', meta.uid)
-      .eq('first_purchase_coupon_used', false)
-      .then(({ error }) => { if (error) console.error('[webhook] coupon mark', error) })
-  }
+      .single()
 
-  // Record order (fire-and-forget)
-  supabase.from('orders').insert({
-    client_id:      meta.uid,
-    quantity:       meta.gb,
-    total_brl:      meta.total_brl,
-    status:         'pago',
-    payment_method: 'pix',
-    paid_at:        new Date().toISOString(),
-  }).then(({ error }) => { if (error) console.error('[webhook] order insert', error) })
+    console.log('[webhook] client lookup:', client ? client.email : 'NOT FOUND')
 
-  // Auto-fulfill via SmartProxy API (or fallback to manual stock)
-  ;(async () => {
+    // Mark coupon used
+    if (meta.coupon === 'LUMA10') {
+      await supabase.from('clients')
+        .update({ first_purchase_coupon_used: true })
+        .eq('id', meta.uid)
+        .eq('first_purchase_coupon_used', false)
+    }
+
+    // Record order
+    const { error: orderErr } = await supabase.from('orders').insert({
+      client_id:      meta.uid,
+      quantity:       meta.gb,
+      total_brl:      meta.total_brl,
+      status:         'pago',
+      payment_method: 'pix',
+      paid_at:        new Date().toISOString(),
+    })
+    if (orderErr) console.error('[webhook] order insert:', orderErr.message)
+
     const smartproxyKey = process.env.SMARTPROXY_APP_KEY
-
     let proxyHost: string
     let proxyPort: number
     let proxyUser: string
@@ -102,40 +104,36 @@ export async function POST(req: NextRequest) {
     let emailGbLimit: number = Number(meta.gb)
 
     if (smartproxyKey) {
-      // --- SmartProxy auto-provisioning ---
       proxyUser  = makeUsername(meta.uid)
       proxyPass  = makePassword()
       proxyHost  = GATEWAY_HOST
       proxyPort  = GATEWAY_PORT
       proxyLabel = `${meta.plan_label} Residencial`
 
-      let isRecharge   = false
-      let newGbLimit   = meta.gb
+      let isRecharge    = false
+      let newGbLimit    = meta.gb
       let alreadyUsedGb = 0
 
       try {
+        console.log('[webhook] creating sub-account:', proxyUser)
         const created = await createSubAccount(proxyUser, proxyPass, meta.gb)
-        // SmartProxy prepends "smart-" to usernames — use the actual username from the response
         if (created.username) proxyUser = created.username
-        // Ensure flow_limit is applied — creation may ignore it
+        console.log('[webhook] sub-account created:', proxyUser)
         await updateSubAccount(proxyUser, { flow_limit: meta.gb, status: 1 })
       } catch (err: unknown) {
-        // Sub-account already exists = client is recharging
         const msg = err instanceof Error ? err.message : String(err)
-        console.warn('[webhook] createSubAccount failed (likely recharge):', msg)
+        console.warn('[webhook] createSubAccount failed (recharge?):', msg)
         isRecharge = true
         try {
           const actualUser = proxyUser.startsWith('smart-') ? proxyUser : `smart-${proxyUser}`
           proxyUser = actualUser
-
-          // Read current usage so new limit = already used + newly purchased GB
           const subAccounts = await listSubAccounts()
           const existing = subAccounts.find(u => u.username === proxyUser)
           alreadyUsedGb = existing ? mbToGb(existing.flow_used ?? 0) : 0
           const newLimit = Math.ceil(alreadyUsedGb) + meta.gb
           newGbLimit = newLimit
-
           await updateSubAccount(proxyUser, { status: 1, flow_limit: newLimit })
+          console.log('[webhook] recharge updated, new limit:', newLimit)
         } catch (e2) {
           console.error('[webhook] SmartProxy provision failed:', e2)
           sendAdminAlert()
@@ -143,8 +141,6 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // On recharge: keep existing password (don't overwrite — SmartProxy still has the old one)
-      // and align gb_limit with the same ceiling logic used for SmartProxy's flow_limit
       const { data: existingProxy } = await supabase
         .from('proxies')
         .select('gb_limit, password')
@@ -152,8 +148,7 @@ export async function POST(req: NextRequest) {
         .single()
 
       if (isRecharge && existingProxy?.password) {
-        proxyPass  = existingProxy.password
-        // newGbLimit already set to Math.ceil(alreadyUsedGb) + meta.gb — matches SmartProxy
+        proxyPass = existingProxy.password
       } else if (!isRecharge) {
         newGbLimit = meta.gb
       }
@@ -177,13 +172,14 @@ export async function POST(req: NextRequest) {
         .single()
 
       if (upsertErr) {
-        console.error('[webhook] proxy upsert error:', upsertErr.message)
+        console.error('[webhook] proxy upsert:', upsertErr.message)
       } else {
         proxyId = inserted?.id
         emailGbLimit = newGbLimit
+        console.log('[webhook] proxy upserted, id:', proxyId)
       }
     } else {
-      // --- Fallback: pick from manual stock ---
+      // Fallback: manual stock
       const { data: stockProxy, error: proxyErr } = await supabase
         .from('proxies')
         .select('id,label,host,port,username,password,gb_limit,proxy_type')
@@ -198,16 +194,10 @@ export async function POST(req: NextRequest) {
         return
       }
 
-      const { error: assignErr } = await supabase
-        .from('proxies')
+      await supabase.from('proxies')
         .update({ status: 'sold', assigned_to: meta.uid, sold_at: new Date().toISOString() })
         .eq('id', stockProxy.id)
         .eq('status', 'available')
-
-      if (assignErr) {
-        console.error('[webhook] erro ao atribuir proxy:', assignErr.message)
-        return
-      }
 
       proxyHost  = stockProxy.host
       proxyPort  = stockProxy.port
@@ -217,10 +207,10 @@ export async function POST(req: NextRequest) {
       proxyId    = stockProxy.id
     }
 
-    // Email com credenciais da proxy
+    // Credentials email
     if (client?.email) {
       const name = client.name || client.email.split('@')[0]
-      resend.emails.send({
+      const { error: credErr } = await resend.emails.send({
         from:    FROM,
         to:      [client.email],
         subject: `Sua proxy está pronta — ${meta.plan_label} · Luma Proxys`,
@@ -256,38 +246,25 @@ export async function POST(req: NextRequest) {
   </td></tr>
 </table></td></tr></table>
 </body></html>`,
-      }).catch(err => console.error('[webhook] credentials email', err))
+      })
+      if (credErr) console.error('[webhook] credentials email:', credErr)
+      else console.log('[webhook] credentials email sent to:', client.email)
+    } else {
+      console.warn('[webhook] no client email — skipping credentials email')
     }
 
-    void proxyId  // used for future order linkage
-  })()
+    // Payment confirmation email
+    if (client?.email) {
+      const name       = client.name || client.email.split('@')[0]
+      const couponLine = meta.coupon
+        ? `<tr><td style="color:rgba(244,242,248,.4);">Cupom</td><td style="color:#34d399;text-align:right;font-family:'Courier New',monospace;">${meta.coupon} · −10%</td></tr>`
+        : ''
 
-  function sendAdminAlert() {
-    const adminEmail = process.env.ADMIN_EMAIL ?? 'ruanpablo2702@gmail.com'
-    resend.emails.send({
-      from:    FROM,
-      to:      [adminEmail],
-      subject: '⚠️ Fulfill falhou — intervenção manual necessária',
-      html: `<p>Um pagamento foi confirmado mas o provisionamento da proxy falhou.</p>
-<p><b>Cliente:</b> ${meta.uid}<br>
-<b>Plano:</b> ${meta.plan_label}<br>
-<b>Valor:</b> R$ ${meta.total_brl.toFixed(2)}</p>
-<p>Verifique os logs do Vercel e provisione manualmente.</p>`,
-    }).catch(e => console.error('[webhook] admin alert', e))
-  }
-
-  // Send confirmation email (fire-and-forget — SyncPay has 5s webhook timeout)
-  if (client?.email) {
-    const name       = client.name || client.email.split('@')[0]
-    const couponLine = meta.coupon
-      ? `<tr><td style="color:rgba(244,242,248,.4);">Cupom</td><td style="color:#34d399;text-align:right;font-family:'Courier New',monospace;">${meta.coupon} · −10%</td></tr>`
-      : ''
-
-    resend.emails.send({
-      from:    FROM,
-      to:      [client.email],
-      subject: `Pagamento confirmado — ${meta.plan_label} · Luma Proxys`,
-      html: `<!DOCTYPE html><html lang="pt-BR"><body style="margin:0;padding:40px 20px;background:#08070c;font-family:'Helvetica Neue',Arial,sans-serif;color:#f4f2f8;">
+      const { error: confErr } = await resend.emails.send({
+        from:    FROM,
+        to:      [client.email],
+        subject: `Pagamento confirmado — ${meta.plan_label} · Luma Proxys`,
+        html: `<!DOCTYPE html><html lang="pt-BR"><body style="margin:0;padding:40px 20px;background:#08070c;font-family:'Helvetica Neue',Arial,sans-serif;color:#f4f2f8;">
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
 <table width="480" cellpadding="0" cellspacing="0" style="max-width:480px;width:100%;">
   <tr><td style="padding-bottom:24px;text-align:center;">
@@ -315,9 +292,6 @@ export async function POST(req: NextRequest) {
         </tr>
       </table>
     </div>
-    <p style="margin:0 0 20px;font-size:13.5px;color:rgba(244,242,248,.5);line-height:1.7;">
-      Em breve você receberá as credenciais da sua proxy por email.
-    </p>
     <a href="${APP_URL}/" style="display:inline-block;background:#a855f7;color:#fff;font-weight:700;font-size:14px;padding:13px 28px;border-radius:12px;text-decoration:none;">
       Acessar minha conta →
     </a>
@@ -327,9 +301,27 @@ export async function POST(req: NextRequest) {
   </td></tr>
 </table></td></tr></table>
 </body></html>`,
-    }).catch(err => console.error('[webhook] email send', err))
+      })
+      if (confErr) console.error('[webhook] confirmation email:', confErr)
+      else console.log('[webhook] confirmation email sent to:', client.email)
+    }
+
+    void proxyId
+  })
+
+  function sendAdminAlert() {
+    const adminEmail = process.env.ADMIN_EMAIL ?? 'ruanpablo2702@gmail.com'
+    resend.emails.send({
+      from:    FROM,
+      to:      [adminEmail],
+      subject: '⚠️ Fulfill falhou — intervenção manual necessária',
+      html: `<p>Um pagamento foi confirmado mas o provisionamento da proxy falhou.</p>
+<p><b>Cliente:</b> ${meta.uid}<br>
+<b>Plano:</b> ${meta.plan_label}<br>
+<b>Valor:</b> R$ ${meta.total_brl.toFixed(2)}</p>
+<p>Verifique os logs do Vercel e provisione manualmente.</p>`,
+    }).catch(e => console.error('[webhook] admin alert', e))
   }
 
-  // Respond immediately — SyncPay has a 5-second webhook timeout
   return NextResponse.json({ ok: true })
 }
