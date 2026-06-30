@@ -1,90 +1,99 @@
-import https from 'node:https'
-import { HttpsProxyAgent } from 'https-proxy-agent'
+// SmartProxy management API — authenticates via session login (not app_key)
+// CF bypass: ua-sec + Hash headers (confirmed working from server IPs)
+// Token lasts 7 days; re-login on cold start or expiry
 
-const BASE         = 'https://www.smartproxy.org/web_v1'
-const APP_KEY      = process.env.SMARTPROXY_APP_KEY ?? ''
 export const GATEWAY_HOST = process.env.SMARTPROXY_GATEWAY_HOST ?? 'proxy.smartproxy.net'
 export const GATEWAY_PORT = Number(process.env.SMARTPROXY_GATEWAY_PORT ?? '3120')
+
+const BASE         = 'https://www.smartproxy.org/web_v1'
 const PRODUCT_TYPE = 9
 
-interface SimpleResponse {
-  ok: boolean
-  status: number
-  text(): Promise<string>
-  json(): Promise<unknown>
-}
+// Module-level token cache (survives within a Vercel function instance lifetime)
+let _token: string | null = null
+let _tokenExpiry = 0
 
-function makeProxyAgent(): HttpsProxyAgent<string> | null {
-  const user = process.env.SMARTPROXY_ROUTING_USER ?? ''
-  const pass = process.env.SMARTPROXY_ROUTING_PASS ?? ''
-  if (!user || !pass) {
-    console.log('[smartproxy] proxy routing: disabled (no credentials)')
-    return null
+// Headers required to bypass Cloudflare WAF on smartproxy.org
+function cfHeaders(token?: string): Record<string, string> {
+  const h: Record<string, string> = {
+    'Content-Type':  'application/json',
+    'Accept':        'application/json',
+    'ua-sec':        'https://www.smartproxy.org',
+    'Hash':          'SmartProxy.org',
+    'Origin':        'https://www.smartproxy.org',
+    'Referer':       'https://www.smartproxy.org/',
+    'User-Agent':    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
   }
-  console.log('[smartproxy] proxy routing: enabled via https-proxy-agent (CONNECT)')
-  return new HttpsProxyAgent(`http://${user}:${pass}@${GATEWAY_HOST}:${GATEWAY_PORT}`)
+  if (token) h['Authorization'] = `Bearer ${token}`
+  return h
 }
 
-function nodeRequest(
-  url: string,
-  init: { method?: string; headers?: Record<string, string>; body?: string },
-  agent: HttpsProxyAgent<string>,
-): Promise<SimpleResponse> {
-  return new Promise((resolve, reject) => {
-    const u     = new URL(url)
-    const data  = init.body ? Buffer.from(init.body, 'utf8') : undefined
-    const reqOpts: https.RequestOptions = {
-      hostname: u.hostname,
-      port:     parseInt(u.port || '443', 10),
-      path:     u.pathname + u.search,
-      method:   init.method ?? 'GET',
-      headers:  {
-        ...(init.headers ?? {}),
-        ...(data ? { 'Content-Length': String(data.length) } : {}),
-      },
-      agent,
-    }
-    const req = https.request(reqOpts, res => {
-      const chunks: Buffer[] = []
-      res.on('data', (c: Buffer) => chunks.push(c))
-      res.on('end', () => {
-        const text = Buffer.concat(chunks).toString('utf8')
-        resolve({
-          ok:     (res.statusCode ?? 0) >= 200 && (res.statusCode ?? 0) < 300,
-          status:  res.statusCode ?? 0,
-          text:   async () => text,
-          json:   async () => JSON.parse(text) as unknown,
-        })
-      })
-      res.on('error', reject)
-    })
-    req.on('error', reject)
-    if (data) req.write(data)
-    req.end()
+async function login(): Promise<string> {
+  const email    = process.env.SMARTPROXY_EMAIL    ?? ''
+  const password = process.env.SMARTPROXY_PASSWORD ?? ''
+  if (!email || !password) throw new Error('[smartproxy] SMARTPROXY_EMAIL / SMARTPROXY_PASSWORD not set')
+
+  console.log('[smartproxy] logging in as:', email)
+  const res  = await fetch(`${BASE}/user/login`, {
+    method:  'POST',
+    headers: cfHeaders(),
+    body:    JSON.stringify({ email, password }),
   })
+  const data = await res.json() as { code: number; msg?: string; data?: { access_token: string } }
+  if (data.code !== 200) throw new Error(`[smartproxy] login failed (${data.code}): ${data.msg}`)
+
+  const token = data.data?.access_token
+  if (!token) throw new Error('[smartproxy] login: no access_token in response')
+
+  console.log('[smartproxy] login OK, token obtained')
+  return token
 }
 
-async function apiFetch(url: string, init?: { method?: string; headers?: Record<string, string>; body?: string }): Promise<SimpleResponse> {
-  const agent = makeProxyAgent()
-  if (agent) {
-    return nodeRequest(url, init ?? {}, agent)
-  }
-  const res = await fetch(url, init as RequestInit)
+async function getToken(): Promise<string> {
+  if (_token && Date.now() < _tokenExpiry) return _token
+
+  _token       = await login()
+  _tokenExpiry = Date.now() + 6 * 24 * 60 * 60 * 1000  // refresh 1 day before 7-day expiry
+  return _token
+}
+
+async function apiFetch(
+  url: string,
+  init?: { method?: string; body?: string },
+): Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }> {
+  const token = await getToken()
+  const res   = await fetch(url, {
+    method:  init?.method ?? 'GET',
+    headers: cfHeaders(token),
+    body:    init?.body,
+  })
   const text = await res.text()
+
+  // If token expired mid-session, clear cache and retry once
+  if (!res.ok || text.includes('"code":3')) {
+    const parsed = JSON.parse(text) as { code: number; msg?: string }
+    if (parsed.code === 3) {
+      console.warn('[smartproxy] token expired — re-logging in')
+      _token = null
+      _tokenExpiry = 0
+      const token2 = await getToken()
+      const res2   = await fetch(url, {
+        method:  init?.method ?? 'GET',
+        headers: cfHeaders(token2),
+        body:    init?.body,
+      })
+      const text2 = await res2.text()
+      return {
+        ok:     res2.ok,
+        status: res2.status,
+        json:   async () => JSON.parse(text2) as unknown,
+      }
+    }
+  }
+
   return {
     ok:     res.ok,
     status: res.status,
-    text:   async () => text,
     json:   async () => JSON.parse(text) as unknown,
-  }
-}
-
-function headers(): Record<string, string> {
-  return {
-    'Content-Type':  'application/json',
-    'Accept':        'application/json',
-    'app-key':       APP_KEY,
-    'Authorization': `Bearer ${APP_KEY}`,
   }
 }
 
@@ -99,22 +108,24 @@ export interface SubAccount {
 
 export async function createSubAccount(username: string, password: string, limitGb: number): Promise<SubAccount> {
   const res = await apiFetch(`${BASE}/whitelist-account/add?language=en`, {
-    method:  'POST',
-    headers: headers(),
-    body:    JSON.stringify({ product_type: PRODUCT_TYPE, username, pwd: password, flow_limit: limitGb, day_limit: 0 }),
+    method: 'POST',
+    body:   JSON.stringify({ product_type: PRODUCT_TYPE, username, pwd: password, flow_limit: limitGb, day_limit: 0 }),
   })
-  if (!res.ok) throw new Error(`SmartProxy createSubAccount ${res.status}: ${await res.text()}`)
+  if (!res.ok) {
+    const t = await res.json() as { code: number; msg?: string }
+    throw new Error(`SmartProxy createSubAccount ${res.status}: ${t.msg ?? JSON.stringify(t)}`)
+  }
   const data = await res.json() as { code: number; msg?: string; data?: unknown }
   if (data.code !== 0 && data.code !== 200) throw new Error(`SmartProxy: ${data.msg ?? JSON.stringify(data)}`)
   return (data.data ?? { username, flow_limit: limitGb }) as SubAccount
 }
 
 export async function listSubAccounts(): Promise<SubAccount[]> {
-  const res = await apiFetch(
-    `${BASE}/whitelist-account/list?language=en&product_type=${PRODUCT_TYPE}`,
-    { headers: headers() },
-  )
-  if (!res.ok) throw new Error(`SmartProxy listSubAccounts ${res.status}: ${await res.text()}`)
+  const res = await apiFetch(`${BASE}/whitelist-account/list?language=en&product_type=${PRODUCT_TYPE}`)
+  if (!res.ok) {
+    const t = await res.json() as { code: number; msg?: string }
+    throw new Error(`SmartProxy listSubAccounts ${res.status}: ${t.msg}`)
+  }
   const data = await res.json() as { code: number; msg?: string; data?: unknown[] }
   if (data.code !== 0 && data.code !== 200) throw new Error(`SmartProxy: ${data.msg}`)
   return (data.data ?? []) as SubAccount[]
@@ -122,11 +133,13 @@ export async function listSubAccounts(): Promise<SubAccount[]> {
 
 export async function updateSubAccount(username: string, fields: { flow_limit?: number; status?: number }): Promise<void> {
   const res = await apiFetch(`${BASE}/whitelist-account/change?language=en`, {
-    method:  'POST',
-    headers: headers(),
-    body:    JSON.stringify({ product_type: PRODUCT_TYPE, username, ...fields }),
+    method: 'POST',
+    body:   JSON.stringify({ product_type: PRODUCT_TYPE, username, ...fields }),
   })
-  if (!res.ok) throw new Error(`SmartProxy updateSubAccount ${res.status}: ${await res.text()}`)
+  if (!res.ok) {
+    const t = await res.json() as { code: number; msg?: string }
+    throw new Error(`SmartProxy updateSubAccount ${res.status}: ${t.msg}`)
+  }
   const data = await res.json() as { code: number; msg?: string }
   if (data.code !== 0 && data.code !== 200) throw new Error(`SmartProxy: ${data.msg}`)
 }

@@ -22,8 +22,8 @@ export async function GET(req: NextRequest) {
 
   if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 })
 
-  // If SmartProxy API key is set, sync real usage data
-  if (process.env.SMARTPROXY_APP_KEY) {
+  // If SmartProxy credentials are set, sync real usage data
+  if (process.env.SMARTPROXY_EMAIL && process.env.SMARTPROXY_PASSWORD) {
     try {
       const subAccounts = await listSubAccounts()
       const usageMap = new Map<string, number>(

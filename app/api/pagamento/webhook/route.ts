@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
     })
     if (orderErr) console.error('[webhook] order insert:', orderErr.message)
 
-    const smartproxyKey = process.env.SMARTPROXY_APP_KEY
+    const smartproxyEnabled = !!(process.env.SMARTPROXY_EMAIL && process.env.SMARTPROXY_PASSWORD)
     let proxyHost: string
     let proxyPort: number
     let proxyUser: string
@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
     let proxyId: string | undefined
     let emailGbLimit: number = Number(meta.gb)
 
-    if (smartproxyKey) {
+    if (smartproxyEnabled) {
       proxyUser  = makeUsername(meta.uid)
       proxyPass  = makePassword()
       proxyHost  = GATEWAY_HOST
