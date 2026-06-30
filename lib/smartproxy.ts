@@ -27,33 +27,17 @@ function cfHeaders(token?: string): Record<string, string> {
   return h
 }
 
-async function login(): Promise<string> {
-  const email    = process.env.SMARTPROXY_EMAIL    ?? ''
-  const password = process.env.SMARTPROXY_PASSWORD ?? ''
-  if (!email || !password) throw new Error('[smartproxy] SMARTPROXY_EMAIL / SMARTPROXY_PASSWORD not set')
-
-  console.log('[smartproxy] logging in as:', email)
-  const res  = await fetch(`${BASE}/user/login`, {
-    method:  'POST',
-    headers: cfHeaders(),
-    body:    JSON.stringify({ email, password }),
-  })
-  const data = await res.json() as { code: number; msg?: string; data?: { access_token: string } }
-  if (data.code !== 200) throw new Error(`[smartproxy] login failed (${data.code}): ${data.msg}`)
-
-  const token = data.data?.access_token
-  if (!token) throw new Error('[smartproxy] login: no access_token in response')
-
-  console.log('[smartproxy] login OK, token obtained')
-  return token
-}
-
 async function getToken(): Promise<string> {
+  // Use static session token if set (extracted from browser, avoids Turnstile on login)
+  const staticToken = process.env.SMARTPROXY_SESSION_TOKEN
+  if (staticToken) {
+    console.log('[smartproxy] using static session token')
+    return staticToken
+  }
+
   if (_token && Date.now() < _tokenExpiry) return _token
 
-  _token       = await login()
-  _tokenExpiry = Date.now() + 6 * 24 * 60 * 60 * 1000  // refresh 1 day before 7-day expiry
-  return _token
+  throw new Error('[smartproxy] SMARTPROXY_SESSION_TOKEN not set. Extract the VE9LRU4 cookie from your logged-in SmartProxy browser session and add it as SMARTPROXY_SESSION_TOKEN in .env.local and Vercel.')
 }
 
 async function apiFetch(
@@ -67,29 +51,6 @@ async function apiFetch(
     body:    init?.body,
   })
   const text = await res.text()
-
-  // If token expired mid-session, clear cache and retry once
-  if (!res.ok || text.includes('"code":3')) {
-    const parsed = JSON.parse(text) as { code: number; msg?: string }
-    if (parsed.code === 3) {
-      console.warn('[smartproxy] token expired — re-logging in')
-      _token = null
-      _tokenExpiry = 0
-      const token2 = await getToken()
-      const res2   = await fetch(url, {
-        method:  init?.method ?? 'GET',
-        headers: cfHeaders(token2),
-        body:    init?.body,
-      })
-      const text2 = await res2.text()
-      return {
-        ok:     res2.ok,
-        status: res2.status,
-        json:   async () => JSON.parse(text2) as unknown,
-      }
-    }
-  }
-
   return {
     ok:     res.ok,
     status: res.status,
