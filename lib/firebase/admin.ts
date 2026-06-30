@@ -1,15 +1,28 @@
-import { initializeApp, getApps, cert, App } from 'firebase-admin/app'
-import { getAuth } from 'firebase-admin/auth'
+import { createRemoteJWKSet, jwtVerify, JWTPayload } from 'jose'
 
-function getAdminApp(): App {
-  if (getApps().length) return getApps()[0]
-  return initializeApp({
-    credential: cert({
-      projectId:   process.env.FIREBASE_ADMIN_PROJECT_ID!,
-      clientEmail: process.env.FIREBASE_ADMIN_CLIENT_EMAIL!,
-      privateKey:  process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, '\n')!,
-    }),
-  })
+const PROJECT_ID = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? 'luma-proxies'
+
+const JWKS = createRemoteJWKSet(
+  new URL(
+    'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com'
+  )
+)
+
+export interface DecodedIdToken extends JWTPayload {
+  uid: string
+  email?: string
+  email_verified?: boolean
+  name?: string
+  picture?: string
+  firebase?: Record<string, unknown>
 }
 
-export const adminAuth = getAuth(getAdminApp())
+async function verifyIdToken(token: string): Promise<DecodedIdToken> {
+  const { payload } = await jwtVerify(token, JWKS, {
+    issuer:   `https://securetoken.google.com/${PROJECT_ID}`,
+    audience: PROJECT_ID,
+  })
+  return { ...payload, uid: payload.sub as string }
+}
+
+export const adminAuth = { verifyIdToken }
