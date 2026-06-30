@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { headers } from 'next/headers'
+import { createHmac } from 'crypto'
 import { createPixCashIn } from '@/lib/syncpay'
 import { createServerClient } from '@/lib/supabase/server'
 
@@ -81,7 +82,9 @@ export async function POST(req: NextRequest) {
     JSON.stringify({ uid, gb, plan_label, total_brl: amount, coupon: appliedCoupon })
   ).toString('base64url')
 
-  const webhookUrl = `${APP_URL}/api/pagamento/webhook?secret=${process.env.SYNCPAY_WEBHOOK_SECRET}&m=${meta}`
+  // SyncPay rejects webhook URLs longer than ~260 chars; use HMAC signature instead of raw secret
+  const hmac = createHmac('sha256', process.env.SYNCPAY_WEBHOOK_SECRET ?? '').update(meta).digest('base64url')
+  const webhookUrl = `${APP_URL}/api/pagamento/webhook?m=${meta}&s=${hmac}`
 
   try {
     const result = await createPixCashIn({

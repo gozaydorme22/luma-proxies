@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse, after } from 'next/server'
+import { createHmac } from 'crypto'
 import { createServerClient } from '@/lib/supabase/server'
 import { Resend } from 'resend'
 import {
@@ -23,11 +24,12 @@ function fmt(v: number) {
 export async function POST(req: NextRequest) {
   const { searchParams } = req.nextUrl
 
-  if (searchParams.get('secret') !== process.env.SYNCPAY_WEBHOOK_SECRET) {
+  const metaB64 = searchParams.get('m')
+  const sig     = searchParams.get('s')
+  const expectedSig = createHmac('sha256', process.env.SYNCPAY_WEBHOOK_SECRET ?? '').update(metaB64 ?? '').digest('base64url')
+  if (!sig || sig !== expectedSig) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
-
-  const metaB64 = searchParams.get('m')
   if (!metaB64) return NextResponse.json({ error: 'Missing meta' }, { status: 400 })
 
   interface Meta { uid: string; gb: number; plan_label: string; total_brl: number; coupon: string | null }
