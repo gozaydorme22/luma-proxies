@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Only check stock when SmartProxy auto-provisioning is NOT configured
-  if (!(process.env.SMARTPROXY_EMAIL && process.env.SMARTPROXY_PASSWORD)) {
+  if (!process.env.SMARTPROXY_SESSION_TOKEN) {
     const { count } = await supabase
       .from('proxies')
       .select('id', { count: 'exact', head: true })

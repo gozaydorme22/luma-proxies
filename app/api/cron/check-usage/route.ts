@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { Resend } from 'resend'
-import { listSubAccounts, mbToGb } from '@/lib/smartproxy'
+import { listSubAccounts, kbToGb } from '@/lib/smartproxy'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 const FROM   = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev'
 
-// GET — chamado pelo Vercel Cron a cada 15 minutos
+// GET — chamado pelo Vercel Cron (diário) e por um pinger externo (cron-job.org) a cada 15 minutos
 export async function GET(req: NextRequest) {
-  const secret = req.headers.get('x-cron-secret') ?? req.nextUrl.searchParams.get('secret')
-  if (secret !== process.env.CRON_SECRET) {
+  const authHeader  = req.headers.get('authorization')
+  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
+  const secret = bearerToken ?? req.headers.get('x-cron-secret') ?? req.nextUrl.searchParams.get('secret')
+  if (!secret || secret !== process.env.CRON_SECRET) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
@@ -23,11 +25,11 @@ export async function GET(req: NextRequest) {
   if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 })
 
   // If SmartProxy credentials are set, sync real usage data
-  if (process.env.SMARTPROXY_EMAIL && process.env.SMARTPROXY_PASSWORD) {
+  if (process.env.SMARTPROXY_SESSION_TOKEN) {
     try {
       const subAccounts = await listSubAccounts()
       const usageMap = new Map<string, number>(
-        subAccounts.map(u => [u.username, mbToGb(u.flow_used ?? 0)])
+        subAccounts.map(u => [u.username, kbToGb(u.usage_flow ?? 0)])
       )
 
       for (const proxy of proxies ?? []) {

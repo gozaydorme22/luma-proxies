@@ -58,57 +58,63 @@ async function apiFetch(
   }
 }
 
+// Real field names/units as returned by whitelist-account/list (reverse-engineered from the dashboard bundle)
 export interface SubAccount {
-  username:    string
-  pwd?:        string
-  flow_limit?: number
-  day_limit?:  number
-  flow_used?:  number
-  status?:     number
+  username:          string
+  password?:         string
+  limit_flow?:       number // KB; 0 = unlimited
+  daily_limit_flow?: number // KB
+  usage_flow?:       number // KB
+  status?:           number
 }
 
 export async function createSubAccount(username: string, password: string, limitGb: number): Promise<SubAccount> {
+  // API expects credentials as a single "user:pass" string under `accounts`, and `limit`/`daily_limit` in GB
+  // (reverse-engineered from the dashboard's add-subaccount form — `flow_limit`/`pwd` fields don't exist on this endpoint)
+  const body = { accounts: `${username}:${password}`, product_type: PRODUCT_TYPE, limit: limitGb, daily_limit: 0, remark: '' }
+  console.log('[smartproxy] createSubAccount body:', JSON.stringify(body))
   const res = await apiFetch(`${BASE}/whitelist-account/add?language=en`, {
     method: 'POST',
-    body:   JSON.stringify({ product_type: PRODUCT_TYPE, username, pwd: password, flow_limit: limitGb, day_limit: 0 }),
+    body:   JSON.stringify(body),
   })
-  if (!res.ok) {
-    const t = await res.json() as { code: number; msg?: string }
-    throw new Error(`SmartProxy createSubAccount ${res.status}: ${t.msg ?? JSON.stringify(t)}`)
-  }
   const data = await res.json() as { code: number; msg?: string; data?: unknown }
+  console.log('[smartproxy] createSubAccount response:', JSON.stringify(data).slice(0, 300))
   if (data.code !== 0 && data.code !== 200) throw new Error(`SmartProxy: ${data.msg ?? JSON.stringify(data)}`)
-  return (data.data ?? { username, flow_limit: limitGb }) as SubAccount
+  // The add endpoint returns no data — SmartProxy prepends "smart-" to whatever username we sent
+  return { username: `smart-${username}`, limit_flow: limitGb * 1024 * 1024 }
 }
 
 export async function listSubAccounts(): Promise<SubAccount[]> {
   const res = await apiFetch(`${BASE}/whitelist-account/list?language=en&product_type=${PRODUCT_TYPE}`)
-  if (!res.ok) {
-    const t = await res.json() as { code: number; msg?: string }
-    throw new Error(`SmartProxy listSubAccounts ${res.status}: ${t.msg}`)
-  }
-  const data = await res.json() as { code: number; msg?: string; data?: unknown[] }
-  if (data.code !== 0 && data.code !== 200) throw new Error(`SmartProxy: ${data.msg}`)
-  return (data.data ?? []) as SubAccount[]
+  const data = await res.json() as { code: number; msg?: string; data?: unknown }
+  console.log('[smartproxy] listSubAccounts raw:', JSON.stringify(data).slice(0, 300))
+  if (!res.ok || (data.code !== 0 && data.code !== 200)) throw new Error(`SmartProxy listSubAccounts: ${data.msg ?? data.code}`)
+  // data.data may be an array or an object with a list field
+  const list = Array.isArray(data.data) ? data.data : (data.data as { list?: unknown[] })?.list ?? []
+  return list as SubAccount[]
 }
 
-export async function updateSubAccount(username: string, fields: { flow_limit?: number; status?: number }): Promise<void> {
+export async function updateSubAccount(username: string, fields: { limitGb?: number; status?: number }): Promise<void> {
+  // change endpoint expects the FULL username (with "smart-" prefix) under `account`, and `limit` in GB
+  const fullUsername = username.startsWith('smart-') ? username : `smart-${username}`
+  const body: Record<string, unknown> = { product_type: PRODUCT_TYPE, account: fullUsername, remark: '', daily_limit: 0 }
+  if (fields.limitGb !== undefined) body.limit = fields.limitGb
+  if (fields.status !== undefined) body.status = fields.status
+  console.log('[smartproxy] updateSubAccount body:', JSON.stringify(body))
   const res = await apiFetch(`${BASE}/whitelist-account/change?language=en`, {
     method: 'POST',
-    body:   JSON.stringify({ product_type: PRODUCT_TYPE, username, ...fields }),
+    body:   JSON.stringify(body),
   })
-  if (!res.ok) {
-    const t = await res.json() as { code: number; msg?: string }
-    throw new Error(`SmartProxy updateSubAccount ${res.status}: ${t.msg}`)
-  }
   const data = await res.json() as { code: number; msg?: string }
+  console.log('[smartproxy] updateSubAccount response:', JSON.stringify(data).slice(0, 200))
   if (data.code !== 0 && data.code !== 200) throw new Error(`SmartProxy: ${data.msg}`)
 }
 
-export function mbToGb(mb: number): number { return mb / 1024 }
+export function kbToGb(kb: number): number { return kb / 1024 / 1024 }
 
 export function makeUsername(uid: string): string {
-  return `luma${uid.replace(/[^a-z0-9]/gi, '').slice(0, 10).toLowerCase()}`
+  // SmartProxy username limit: 12 chars max ("luma" = 4, so 8 from uid)
+  return `luma${uid.replace(/[^a-z0-9]/gi, '').slice(0, 8).toLowerCase()}`
 }
 
 export function makePassword(): string {

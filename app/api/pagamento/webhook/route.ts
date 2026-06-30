@@ -7,7 +7,7 @@ import {
   listSubAccounts,
   makeUsername,
   makePassword,
-  mbToGb,
+  kbToGb,
   GATEWAY_HOST,
   GATEWAY_PORT,
 } from '@/lib/smartproxy'
@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
     })
     if (orderErr) console.error('[webhook] order insert:', orderErr.message)
 
-    const smartproxyEnabled = !!(process.env.SMARTPROXY_EMAIL && process.env.SMARTPROXY_PASSWORD)
+    const smartproxyEnabled = !!process.env.SMARTPROXY_SESSION_TOKEN
     let proxyHost: string
     let proxyPort: number
     let proxyUser: string
@@ -119,7 +119,6 @@ export async function POST(req: NextRequest) {
         const created = await createSubAccount(proxyUser, proxyPass, meta.gb)
         if (created.username) proxyUser = created.username
         console.log('[webhook] sub-account created:', proxyUser)
-        await updateSubAccount(proxyUser, { flow_limit: meta.gb, status: 1 })
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err)
         console.warn('[webhook] createSubAccount failed (recharge?):', msg)
@@ -129,10 +128,10 @@ export async function POST(req: NextRequest) {
           proxyUser = actualUser
           const subAccounts = await listSubAccounts()
           const existing = subAccounts.find(u => u.username === proxyUser)
-          alreadyUsedGb = existing ? mbToGb(existing.flow_used ?? 0) : 0
+          alreadyUsedGb = existing ? kbToGb(existing.usage_flow ?? 0) : 0
           const newLimit = Math.ceil(alreadyUsedGb) + meta.gb
           newGbLimit = newLimit
-          await updateSubAccount(proxyUser, { status: 1, flow_limit: newLimit })
+          await updateSubAccount(proxyUser, { status: 1, limitGb: newLimit })
           console.log('[webhook] recharge updated, new limit:', newLimit)
         } catch (e2) {
           console.error('[webhook] SmartProxy provision failed:', e2)
@@ -143,9 +142,9 @@ export async function POST(req: NextRequest) {
 
       const { data: existingProxy } = await supabase
         .from('proxies')
-        .select('gb_limit, password')
+        .select('id, gb_limit, password')
         .eq('username', proxyUser)
-        .single()
+        .maybeSingle()
 
       if (isRecharge && existingProxy?.password) {
         proxyPass = existingProxy.password
@@ -153,30 +152,30 @@ export async function POST(req: NextRequest) {
         newGbLimit = meta.gb
       }
 
-      const { data: inserted, error: upsertErr } = await supabase
-        .from('proxies')
-        .upsert({
-          label:       proxyLabel,
-          host:        proxyHost,
-          port:        proxyPort,
-          username:    proxyUser,
-          password:    proxyPass,
-          gb_limit:    newGbLimit,
-          price:       meta.total_brl,
-          proxy_type:  'residencial',
-          status:      'sold',
-          assigned_to: meta.uid,
-          sold_at:     new Date().toISOString(),
-        }, { onConflict: 'username' })
-        .select('id')
-        .single()
+      const proxyRow = {
+        label:       proxyLabel,
+        host:        proxyHost,
+        port:        proxyPort,
+        username:    proxyUser,
+        password:    proxyPass,
+        gb_limit:    newGbLimit,
+        price:       meta.total_brl,
+        proxy_type:  'residencial',
+        status:      'sold',
+        assigned_to: meta.uid,
+        sold_at:     new Date().toISOString(),
+      }
 
-      if (upsertErr) {
-        console.error('[webhook] proxy upsert:', upsertErr.message)
+      const { data: written, error: writeErr } = existingProxy
+        ? await supabase.from('proxies').update(proxyRow).eq('id', existingProxy.id).select('id').single()
+        : await supabase.from('proxies').insert(proxyRow).select('id').single()
+
+      if (writeErr) {
+        console.error('[webhook] proxy write:', writeErr.message)
       } else {
-        proxyId = inserted?.id
+        proxyId = written?.id
         emailGbLimit = newGbLimit
-        console.log('[webhook] proxy upserted, id:', proxyId)
+        console.log('[webhook] proxy written, id:', proxyId)
       }
     } else {
       // Fallback: manual stock
