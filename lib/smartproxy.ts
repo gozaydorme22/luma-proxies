@@ -1,4 +1,4 @@
-import { ProxyAgent, fetch as undiciFetch } from 'undici'
+import { ProxyAgent, request as undiciRequest } from 'undici'
 
 const BASE         = 'https://www.smartproxy.org/web_v1'
 const APP_KEY      = process.env.SMARTPROXY_APP_KEY ?? ''
@@ -22,15 +22,29 @@ function getAgent(): ProxyAgent | null {
 async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
   const agent = getAgent()
   if (agent) {
-    return undiciFetch(url, {
-      ...(init as Parameters<typeof undiciFetch>[1]),
+    const method = (init?.method ?? 'GET') as string
+    const headers = init?.headers as Record<string, string> | undefined
+    const body    = init?.body as string | Buffer | undefined
+
+    const { statusCode, body: responseBody } = await undiciRequest(url, {
+      method:     method as 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH',
+      headers,
+      body,
       dispatcher: agent,
-    }) as unknown as Response
+    })
+
+    const text = await responseBody.text()
+    return {
+      ok:     statusCode >= 200 && statusCode < 300,
+      status: statusCode,
+      json:   async () => JSON.parse(text) as unknown,
+      text:   async () => text,
+    } as unknown as Response
   }
   return fetch(url, init)
 }
 
-function headers() {
+function headers(): Record<string, string> {
   return {
     'Content-Type':  'application/json',
     'Accept':        'application/json',
@@ -55,7 +69,7 @@ export async function createSubAccount(username: string, password: string, limit
     body:    JSON.stringify({ product_type: PRODUCT_TYPE, username, pwd: password, flow_limit: limitGb, day_limit: 0 }),
   })
   if (!res.ok) throw new Error(`SmartProxy createSubAccount ${res.status}: ${await res.text()}`)
-  const data = await res.json()
+  const data = await res.json() as { code: number; msg?: string; data?: unknown }
   if (data.code !== 0 && data.code !== 200) throw new Error(`SmartProxy: ${data.msg ?? JSON.stringify(data)}`)
   return (data.data ?? { username, flow_limit: limitGb }) as SubAccount
 }
@@ -66,7 +80,7 @@ export async function listSubAccounts(): Promise<SubAccount[]> {
     { headers: headers() },
   )
   if (!res.ok) throw new Error(`SmartProxy listSubAccounts ${res.status}: ${await res.text()}`)
-  const data = await res.json()
+  const data = await res.json() as { code: number; msg?: string; data?: unknown[] }
   if (data.code !== 0 && data.code !== 200) throw new Error(`SmartProxy: ${data.msg}`)
   return (data.data ?? []) as SubAccount[]
 }
@@ -78,7 +92,7 @@ export async function updateSubAccount(username: string, fields: { flow_limit?: 
     body:    JSON.stringify({ product_type: PRODUCT_TYPE, username, ...fields }),
   })
   if (!res.ok) throw new Error(`SmartProxy updateSubAccount ${res.status}: ${await res.text()}`)
-  const data = await res.json()
+  const data = await res.json() as { code: number; msg?: string }
   if (data.code !== 0 && data.code !== 200) throw new Error(`SmartProxy: ${data.msg}`)
 }
 
