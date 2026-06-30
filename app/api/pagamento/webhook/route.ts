@@ -75,14 +75,6 @@ export async function POST(req: NextRequest) {
 
     console.log('[webhook] client lookup:', client ? client.email : 'NOT FOUND')
 
-    // Mark coupon used
-    if (meta.coupon === 'LUMA10') {
-      await supabase.from('clients')
-        .update({ first_purchase_coupon_used: true })
-        .eq('id', meta.uid)
-        .eq('first_purchase_coupon_used', false)
-    }
-
     // Record order
     const { error: orderErr } = await supabase.from('orders').insert({
       client_id:      meta.uid,

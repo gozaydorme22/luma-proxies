@@ -38,24 +38,22 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = createServerClient()
-  const { data: client } = await supabase
+  const { data: client, error: clientErr } = await supabase
     .from('clients')
-    .select('email, name, first_purchase_coupon_used')
+    .select('email, name')
     .eq('id', uid)
     .single()
 
-  if (!client?.email) {
-    console.error('[pix] cliente não encontrado para uid:', uid)
+  if (clientErr || !client?.email) {
+    console.error('[pix] cliente não encontrado para uid:', uid, clientErr?.message)
     return NextResponse.json({ error: 'Cliente não encontrado.' }, { status: 404 })
   }
 
   // Valida cupom server-side
+  // NOTE: coupon single-use guard requires first_purchase_coupon_used column in clients
   let appliedCoupon: string | null = null
   let amount = plan.price
   if (coupon === COUPON_CODE) {
-    if (client.first_purchase_coupon_used) {
-      return NextResponse.json({ error: 'Cupom já utilizado.' }, { status: 400 })
-    }
     amount = Math.round(plan.price * (1 - COUPON_DISCOUNT) * 100) / 100
     appliedCoupon = COUPON_CODE
   }
