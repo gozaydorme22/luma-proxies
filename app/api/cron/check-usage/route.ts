@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { Resend } from 'resend'
-import { listSubAccounts, kbToGb } from '@/lib/smartproxy'
+import { listSubAccounts, kbToGb, mgmtUsername } from '@/lib/smartproxy'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 const FROM   = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev'
@@ -33,7 +33,9 @@ export async function GET(req: NextRequest) {
       )
 
       for (const proxy of proxies ?? []) {
-        const realUsedGb = usageMap.get(proxy.username)
+        // proxies.username may include -country-XX suffix; strip it for SmartProxy API lookup
+        const lookupKey = mgmtUsername(proxy.username)
+        const realUsedGb = usageMap.get(lookupKey)
         if (realUsedGb === undefined) continue
 
         // Update used_gb from API

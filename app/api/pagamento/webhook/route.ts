@@ -8,6 +8,8 @@ import {
   listSubAccounts,
   makeUsername,
   makePassword,
+  connectionUsername,
+  mgmtUsername,
   kbToGb,
   GATEWAY_HOST,
   GATEWAY_PORT,
@@ -98,34 +100,33 @@ export async function POST(req: NextRequest) {
     let emailGbLimit: number = Number(meta.gb)
 
     if (smartproxyEnabled) {
-      proxyUser  = makeUsername(meta.uid)
+      const baseUser = makeUsername(meta.uid)
+      proxyUser  = connectionUsername(baseUser)  // smart-xxx-country-br (for storage/email)
       proxyPass  = makePassword()
       proxyHost  = GATEWAY_HOST
       proxyPort  = GATEWAY_PORT
-      proxyLabel = `${meta.plan_label} Residencial`
+      proxyLabel = `${meta.plan_label} Residencial BR`
 
       let isRecharge    = false
       let newGbLimit    = meta.gb
       let alreadyUsedGb = 0
 
       try {
-        console.log('[webhook] creating sub-account:', proxyUser)
-        const created = await createSubAccount(proxyUser, proxyPass, meta.gb)
-        if (created.username) proxyUser = created.username
+        console.log('[webhook] creating sub-account:', baseUser)
+        await createSubAccount(baseUser, proxyPass, meta.gb)
         console.log('[webhook] sub-account created:', proxyUser)
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err)
         console.warn('[webhook] createSubAccount failed (recharge?):', msg)
         isRecharge = true
         try {
-          const actualUser = proxyUser.startsWith('smart-') ? proxyUser : `smart-${proxyUser}`
-          proxyUser = actualUser
+          const mgmtUser = mgmtUsername(proxyUser)
           const subAccounts = await listSubAccounts()
-          const existing = subAccounts.find(u => u.username === proxyUser)
+          const existing = subAccounts.find(u => u.username === mgmtUser)
           alreadyUsedGb = existing ? kbToGb(existing.usage_flow ?? 0) : 0
           const newLimit = Math.ceil(alreadyUsedGb) + meta.gb
           newGbLimit = newLimit
-          await updateSubAccount(proxyUser, { status: 1, limitGb: newLimit })
+          await updateSubAccount(mgmtUser, { status: 1, limitGb: newLimit })
           console.log('[webhook] recharge updated, new limit:', newLimit)
         } catch (e2) {
           console.error('[webhook] SmartProxy provision failed:', e2)
