@@ -1,4 +1,5 @@
-import { ProxyAgent, request as undiciRequest } from 'undici'
+import https from 'https'
+import { HttpProxyAgent } from 'http-proxy-agent'
 
 const BASE         = 'https://www.smartproxy.org/web_v1'
 const APP_KEY      = process.env.SMARTPROXY_APP_KEY ?? ''
@@ -6,42 +7,76 @@ export const GATEWAY_HOST = process.env.SMARTPROXY_GATEWAY_HOST ?? 'proxy.smartp
 export const GATEWAY_PORT = Number(process.env.SMARTPROXY_GATEWAY_PORT ?? '3120')
 const PRODUCT_TYPE = 9
 
-let _agent: ProxyAgent | null | undefined = undefined
-
-function getAgent(): ProxyAgent | null {
-  if (_agent !== undefined) return _agent
-  const user = process.env.SMARTPROXY_ROUTING_USER ?? ''
-  const pass = process.env.SMARTPROXY_ROUTING_PASS ?? ''
-  _agent = (user && pass)
-    ? new ProxyAgent(`http://${user}:${pass}@${GATEWAY_HOST}:${GATEWAY_PORT}`)
-    : null
-  console.log('[smartproxy] proxy routing:', _agent ? 'enabled' : 'disabled (direct)')
-  return _agent
+interface SimpleResponse {
+  ok: boolean
+  status: number
+  text(): Promise<string>
+  json(): Promise<unknown>
 }
 
-async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
-  const agent = getAgent()
-  if (agent) {
-    const method = (init?.method ?? 'GET') as string
-    const headers = init?.headers as Record<string, string> | undefined
-    const body    = init?.body as string | Buffer | undefined
-
-    const { statusCode, body: responseBody } = await undiciRequest(url, {
-      method:     method as 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH',
-      headers,
-      body,
-      dispatcher: agent,
-    })
-
-    const text = await responseBody.text()
-    return {
-      ok:     statusCode >= 200 && statusCode < 300,
-      status: statusCode,
-      json:   async () => JSON.parse(text) as unknown,
-      text:   async () => text,
-    } as unknown as Response
+function makeProxyAgent(): HttpProxyAgent<string> | null {
+  const user = process.env.SMARTPROXY_ROUTING_USER ?? ''
+  const pass = process.env.SMARTPROXY_ROUTING_PASS ?? ''
+  if (!user || !pass) {
+    console.log('[smartproxy] proxy routing: disabled (no credentials)')
+    return null
   }
-  return fetch(url, init)
+  console.log('[smartproxy] proxy routing: enabled via http-proxy-agent')
+  return new HttpProxyAgent(`http://${user}:${pass}@${GATEWAY_HOST}:${GATEWAY_PORT}`)
+}
+
+function nodeRequest(
+  url: string,
+  init: { method?: string; headers?: Record<string, string>; body?: string },
+  agent: HttpProxyAgent<string>,
+): Promise<SimpleResponse> {
+  return new Promise((resolve, reject) => {
+    const u     = new URL(url)
+    const data  = init.body ? Buffer.from(init.body, 'utf8') : undefined
+    const reqOpts: https.RequestOptions = {
+      hostname: u.hostname,
+      port:     parseInt(u.port || '443', 10),
+      path:     u.pathname + u.search,
+      method:   init.method ?? 'GET',
+      headers:  {
+        ...(init.headers ?? {}),
+        ...(data ? { 'Content-Length': String(data.length) } : {}),
+      },
+      agent,
+    }
+    const req = https.request(reqOpts, res => {
+      const chunks: Buffer[] = []
+      res.on('data', (c: Buffer) => chunks.push(c))
+      res.on('end', () => {
+        const text = Buffer.concat(chunks).toString('utf8')
+        resolve({
+          ok:     (res.statusCode ?? 0) >= 200 && (res.statusCode ?? 0) < 300,
+          status:  res.statusCode ?? 0,
+          text:   async () => text,
+          json:   async () => JSON.parse(text) as unknown,
+        })
+      })
+      res.on('error', reject)
+    })
+    req.on('error', reject)
+    if (data) req.write(data)
+    req.end()
+  })
+}
+
+async function apiFetch(url: string, init?: { method?: string; headers?: Record<string, string>; body?: string }): Promise<SimpleResponse> {
+  const agent = makeProxyAgent()
+  if (agent) {
+    return nodeRequest(url, init ?? {}, agent)
+  }
+  const res = await fetch(url, init as RequestInit)
+  const text = await res.text()
+  return {
+    ok:     res.ok,
+    status: res.status,
+    text:   async () => text,
+    json:   async () => JSON.parse(text) as unknown,
+  }
 }
 
 function headers(): Record<string, string> {
