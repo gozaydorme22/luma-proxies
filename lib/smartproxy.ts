@@ -1,6 +1,9 @@
 // SmartProxy.org integration
 // Gateway confirmed: proxy.smartproxy.net:3120 (User/Pass auth)
 // Sub-accounts are called "whitelist-account" in their API
+// API calls are routed through a residential proxy to bypass Cloudflare
+
+import { ProxyAgent, fetch as undiciFetch } from 'undici'
 
 const BASE     = 'https://www.smartproxy.org/web_v1'
 const APP_KEY  = process.env.SMARTPROXY_APP_KEY ?? ''
@@ -8,8 +11,26 @@ const APP_KEY  = process.env.SMARTPROXY_APP_KEY ?? ''
 export const GATEWAY_HOST = process.env.SMARTPROXY_GATEWAY_HOST ?? 'proxy.smartproxy.net'
 export const GATEWAY_PORT = Number(process.env.SMARTPROXY_GATEWAY_PORT ?? '3120')
 
-// product_type=9 = Residential Rotating
 const PRODUCT_TYPE = 9
+
+// Route API calls through a residential sub-account to bypass Cloudflare datacenter IP block
+function makeProxyFetch() {
+  const user = process.env.SMARTPROXY_ROUTING_USER ?? ''
+  const pass = process.env.SMARTPROXY_ROUTING_PASS ?? ''
+  if (!user || !pass) return null
+  const agent = new ProxyAgent(`http://${user}:${pass}@${GATEWAY_HOST}:${GATEWAY_PORT}`)
+  return (url: string, init?: Parameters<typeof undiciFetch>[1]) =>
+    undiciFetch(url, { ...init, dispatcher: agent })
+}
+
+const proxyFetch = makeProxyFetch()
+
+async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
+  if (proxyFetch) {
+    return proxyFetch(url, init as Parameters<typeof undiciFetch>[1]) as unknown as Response
+  }
+  return fetch(url, init)
+}
 
 function headers() {
   return {
@@ -23,10 +44,10 @@ function headers() {
 export interface SubAccount {
   username:    string
   pwd?:        string
-  flow_limit?: number  // GB — traffic upper limit
-  day_limit?:  number  // GB — daily limit (0 = unlimited)
-  flow_used?:  number  // MB — total usage
-  status?:     number  // 1 = enabled, 0 = disabled
+  flow_limit?: number
+  day_limit?:  number
+  flow_used?:  number
+  status?:     number
 }
 
 export async function createSubAccount(
@@ -34,7 +55,7 @@ export async function createSubAccount(
   password: string,
   limitGb:  number,
 ): Promise<SubAccount> {
-  const res = await fetch(`${BASE}/whitelist-account/add?language=en`, {
+  const res = await apiFetch(`${BASE}/whitelist-account/add?language=en`, {
     method:  'POST',
     headers: headers(),
     body: JSON.stringify({
@@ -55,7 +76,7 @@ export async function createSubAccount(
 }
 
 export async function listSubAccounts(): Promise<SubAccount[]> {
-  const res = await fetch(
+  const res = await apiFetch(
     `${BASE}/whitelist-account/list?language=en&product_type=${PRODUCT_TYPE}`,
     { headers: headers() },
   )
@@ -72,7 +93,7 @@ export async function updateSubAccount(
   username: string,
   fields: { flow_limit?: number; status?: number },
 ): Promise<void> {
-  const res = await fetch(`${BASE}/whitelist-account/change?language=en`, {
+  const res = await apiFetch(`${BASE}/whitelist-account/change?language=en`, {
     method:  'POST',
     headers: headers(),
     body: JSON.stringify({ product_type: PRODUCT_TYPE, username, ...fields }),
@@ -85,18 +106,14 @@ export async function updateSubAccount(
   if (data.code !== 0 && data.code !== 200) throw new Error(`SmartProxy: ${data.msg}`)
 }
 
-/** usage_flow returned in MB — convert to GB */
 export function mbToGb(mb: number): number {
   return mb / 1024
 }
 
-/** Generate a unique sub-account username from a Firebase UID */
 export function makeUsername(uid: string): string {
-  // SmartProxy usernames: letters/numbers, max ~20 chars
   return `luma${uid.replace(/[^a-z0-9]/gi, '').slice(0, 10).toLowerCase()}`
 }
 
-/** Generate a random 16-char alphanumeric password */
 export function makePassword(): string {
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
   let out = ''
