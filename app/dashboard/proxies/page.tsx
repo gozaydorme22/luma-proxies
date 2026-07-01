@@ -165,12 +165,11 @@ export default function ProxiesPage() {
       <p style={{ fontSize: 13, color: 'rgba(244,242,248,.45)', margin: '5px 0 0' }}>Bem-vindo de volta. Aqui está o resumo das suas proxies.</p>
 
       {/* STAT CARDS */}
-      <div className="dash-stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 14, marginTop: 26 }}>
+      <div className="dash-stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginTop: 26 }}>
         <StatCard loading={loading} label="Proxys"     value={String(proxies.length)} icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={AC2} strokeWidth="2"><rect x="3" y="4" width="18" height="6" rx="1"/><rect x="3" y="14" width="18" height="6" rx="1"/></svg>} />
         <StatCard loading={loading} label="Ativas"      value={String(ativas)} valueColor="#34d399" icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2"><path d="M5 13a10 10 0 0 1 14 0M8.5 16.5a5 5 0 0 1 7 0M12 20h.01"/></svg>} />
-        <StatCard loading={loading} label="Inativas"    value={String(proxies.length - ativas)} valueColor="rgba(244,242,248,.5)" icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(244,242,248,.5)" strokeWidth="2"><path d="M2 2l20 20M8.5 16.5a5 5 0 0 1 6-.8"/></svg>} />
+        <StatCard loading={loading} label="Inativas"    value={String(proxies.length - ativas)} valueColor="#f87171" icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>} />
         <StatCard loading={loading} label="Saldo total" value={fmtGb(totalRemGb)} icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={AC2} strokeWidth="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/></svg>} />
-        <StatCard loading={loading} label="Tier" value={tier} valueColor={AC2} highlight icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={AC2} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9a6 6 0 0 0 12 0V3H6Z"/><path d="M6 5H3v2a3 3 0 0 0 3 3M18 5h3v2a3 3 0 0 1-3 3M9 21h6M12 15v6"/></svg>} />
       </div>
 
       {/* CHART */}
