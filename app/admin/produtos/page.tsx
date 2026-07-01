@@ -26,9 +26,12 @@ function parseBRL(s: string): number {
 
 const AC = '#a855f7'
 
-const CORRECT_PRICES: Record<number, number> = {
-  3: 24.90, 5: 41.90, 10: 79.90, 20: 157.90,
-}
+const CORRECT_PLANS: Array<{ gb: number; price: number; name: string }> = [
+  { gb: 3,  price: 24.90,  name: 'Proxy Rotativa 3GB'  },
+  { gb: 5,  price: 41.90,  name: 'Proxy Rotativa 5GB'  },
+  { gb: 10, price: 79.90,  name: 'Proxy Rotativa 10GB' },
+  { gb: 20, price: 157.90, name: 'Proxy Rotativa 20GB' },
+]
 
 export default function AdminProdutosPage() {
   const [products, setProducts] = useState<Product[]>([])
@@ -98,20 +101,35 @@ export default function AdminProdutosPage() {
   }
 
   async function applyCorrectPrices() {
-    if (!confirm('Aplicar os preços corretos (R$24,90 / R$41,90 / R$79,90 / R$157,90) para todos os planos?')) return
+    if (!confirm('Sincronizar todos os 4 planos com os preços corretos? Produtos faltando (10GB / 20GB) serão criados.')) return
     setFixing(true)
     try {
       await Promise.all(
-        products
-          .filter(p => CORRECT_PRICES[p.gb_limit] !== undefined)
-          .map(p =>
-            fetch(`/api/admin/products/${p.id}`, {
+        CORRECT_PLANS.map(plan => {
+          const existing = products.find(p => Number(p.gb_limit) === plan.gb)
+          if (existing) {
+            // atualiza preço do produto existente
+            return fetch(`/api/admin/products/${existing.id}`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ price: CORRECT_PRICES[p.gb_limit] }),
+              body: JSON.stringify({ price: plan.price }),
             })
-          )
+          } else {
+            // cria produto novo
+            return fetch('/api/admin/products', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                name:       plan.name,
+                gb_limit:   plan.gb,
+                price:      plan.price,
+                proxy_type: 'residential_rotating',
+              }),
+            })
+          }
+        })
       )
+
       load()
     } finally {
       setFixing(false)
