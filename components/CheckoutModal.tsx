@@ -69,7 +69,7 @@ export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
   const [loading, setLoading]   = useState(false)
   const [payError, setPayError] = useState<string | null>(null)
 
-  type ActiveProxy = { usedGb: number; totalGb: number; label: string }
+  type ActiveProxy = { usedGb: number; totalGb: number; label: string; suspended?: boolean }
   const [activeProxy, setActiveProxy]       = useState<ActiveProxy | null | undefined>(undefined)
   const [purchaseIntent, setPurchaseIntent] = useState<'recharge' | 'new' | null>(null)
 
@@ -112,19 +112,23 @@ export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
       .catch(() => { /* mantém fallback */ })
   }, [initialPlan])
 
-  // Detect if user has an active proxy — determines recharge vs new proxy flow
+  // Detect if user has an active or suspended proxy — determines recharge vs new proxy flow
   useEffect(() => {
     if (!user) return
     fetch('/api/proxies')
       .then(r => r.json())
       .then(d => {
-        const proxy = (d.proxies ?? []).find((p: { status: string }) => p.status === 'ativa')
+        const activeP    = (d.proxies ?? []).find((p: { status: string }) => p.status === 'ativa')
+        const suspendedP = !activeP ? (d.proxies ?? []).find((p: { status: string }) => p.status === 'suspensa') : null
+        const proxy = activeP ?? suspendedP
         if (!proxy) {
           setActiveProxy(null)
           setPurchaseIntent('new')
         } else {
-          setActiveProxy({ usedGb: proxy.usedGb, totalGb: proxy.totalGb, label: proxy.name })
-          if (proxy.usedGb >= proxy.totalGb) setPurchaseIntent('recharge') // expired → auto-recharge
+          setActiveProxy({ usedGb: proxy.usedGb, totalGb: proxy.totalGb, label: proxy.name, suspended: proxy.status === 'suspensa' })
+          if (proxy.status === 'suspensa' || proxy.usedGb >= proxy.totalGb) {
+            setPurchaseIntent('recharge') // suspended or GB exhausted → auto-recharge
+          }
           // else: user must choose
         }
       })
@@ -358,10 +362,13 @@ export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
                         ))}
                       </div>
                     </div>
-                  ) : activeProxy.usedGb >= activeProxy.totalGb ? (
-                    /* Proxy expirada — sempre recarga, sem escolha */
+                  ) : activeProxy.usedGb >= activeProxy.totalGb || activeProxy.suspended ? (
+                    /* Proxy suspensa ou GB esgotado — sempre recarga, sem escolha */
                     <div style={{ background: `color-mix(in srgb,${AC} 7%,transparent)`, border: `1px solid color-mix(in srgb,${AC} 25%,transparent)`, borderRadius: 12, padding: '12px 16px', fontSize: 13.5, color: 'rgba(244,242,248,.75)' }}>
-                      <b style={{ color: AC2 }}>GB esgotado.</b> Sua proxy atual será recarregada com os novos GB.
+                      {activeProxy.suspended
+                        ? <><b style={{ color: AC2 }}>Proxy suspensa</b> (GB esgotado). Você está recarregando — as mesmas credenciais serão restauradas.</>
+                        : <><b style={{ color: AC2 }}>GB esgotado.</b> Sua proxy atual será recarregada com os novos GB.</>
+                      }
                     </div>
                   ) : (
                     /* Mostrar escolha feita + link para alterar */

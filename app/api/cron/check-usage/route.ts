@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { Resend } from 'resend'
-import { listSubAccounts, kbToGb, mgmtUsername } from '@/lib/smartproxy'
+import { listSubAccounts, kbToGb, mgmtUsername, deleteSubAccount } from '@/lib/smartproxy'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 const FROM   = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev'
@@ -130,9 +130,57 @@ export async function GET(req: NextRequest) {
       .lt('snapped_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
   }
 
+  // Auto-delete SmartProxy sub-accounts that have been expired (suspended) for 7+ days
+  let deleted = 0
+  if (process.env.SMARTPROXY_SESSION_TOKEN) {
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+
+    const { data: suspendedProxies } = await supabase
+      .from('proxies')
+      .select('id, username, gb_limit, assigned_to')
+      .eq('status', 'suspended')
+
+    for (const proxy of (suspendedProxies ?? [])) {
+      // Check if there's a snapshot older than 7 days at/above the GB limit
+      const { data: oldSnaps } = await supabase
+        .from('usage_snapshots')
+        .select('snapped_at')
+        .eq('proxy_id', proxy.id)
+        .gte('used_gb', Number(proxy.gb_limit))
+        .lt('snapped_at', sevenDaysAgo)
+        .limit(1)
+
+      if (!oldSnaps || oldSnaps.length === 0) {
+        // Insert a snapshot now to start the 7-day deletion timer
+        await supabase.from('usage_snapshots').insert({
+          proxy_id:   proxy.id,
+          client_id:  proxy.assigned_to,
+          used_gb:    Number(proxy.gb_limit),
+          snapped_at: now,
+        })
+        results.push(`pending_deletion: ${proxy.id} (timer started)`)
+        continue
+      }
+
+      // Suspended for 7+ days — delete from SmartProxy and mark removed
+      const spMgmtUser = mgmtUsername(proxy.username)
+      try {
+        await deleteSubAccount(spMgmtUser)
+        await supabase.from('proxies').update({ status: 'removed' }).eq('id', proxy.id)
+        deleted++
+        results.push(`deleted: ${proxy.id} — ${spMgmtUser}`)
+        console.log('[cron] deleted expired sub-account:', spMgmtUser)
+      } catch (err) {
+        console.error('[cron] failed to delete expired sub-account:', spMgmtUser, err)
+        results.push(`delete_failed: ${proxy.id} — ${err instanceof Error ? err.message : String(err)}`)
+      }
+    }
+  }
+
   return NextResponse.json({
     checked:   refreshed?.length ?? 0,
     suspended,
+    deleted,
     snapshots: snapshots.length,
     results,
     ran_at:    now,

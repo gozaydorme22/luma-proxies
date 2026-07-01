@@ -131,6 +131,19 @@ export function mgmtUsername(username: string): string {
   return username.replace(/_area-[A-Z]{2}$/, '')
 }
 
+export async function deleteSubAccount(username: string): Promise<void> {
+  const fullUsername = username.startsWith('smart-') ? username : `smart-${username}`
+  const body = { accounts: fullUsername, product_type: PRODUCT_TYPE }
+  console.log('[smartproxy] deleteSubAccount:', fullUsername)
+  const res = await apiFetch(`${BASE}/whitelist-account/delete?language=en`, {
+    method: 'POST',
+    body:   JSON.stringify(body),
+  })
+  const data = await res.json() as { code: number; msg?: string }
+  console.log('[smartproxy] deleteSubAccount response:', JSON.stringify(data).slice(0, 200))
+  if (data.code !== 0 && data.code !== 200) throw new Error(`SmartProxy deleteSubAccount: ${data.msg}`)
+}
+
 export function makePassword(): string {
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
   const bytes = randomBytes(16)

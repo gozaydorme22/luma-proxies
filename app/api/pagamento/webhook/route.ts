@@ -115,13 +115,16 @@ export async function POST(req: NextRequest) {
     let emailGbLimit: number = Number(meta.gb)
 
     if (smartproxyEnabled) {
-      // Look up existing proxy first — determines username generation for new vs recharge
-      const { data: existingProxy } = await supabase
+      // Look up existing proxy first — determines username generation for new vs recharge.
+      // For explicit recharge, also include suspended proxies (GB exhausted, not yet recharged).
+      const { data: existingProxies } = await supabase
         .from('proxies')
         .select('id, gb_limit, password, username')
         .eq('assigned_to', meta.uid)
-        .eq('status', 'sold')
-        .maybeSingle()
+        .in('status', meta.is_recharge ? ['sold', 'suspended'] : ['sold'])
+        .order('sold_at', { ascending: false })
+        .limit(1)
+      const existingProxy = existingProxies?.[0] ?? null
 
       // When creating a new proxy while user already has one, derive username from the
       // payment nonce (UUID) so it doesn't collide with the existing sub-account on SmartProxy
