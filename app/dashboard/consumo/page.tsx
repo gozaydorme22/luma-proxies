@@ -67,7 +67,7 @@ export default function ConsumoPage() {
       {/* STAT CARDS */}
       <div className="consumo-stat-grid">
         {[
-          { label: 'Total usado', value: fmtGb(totalUsed), color: AC2 },
+          { label: 'Total usado (14d)', value: fmtGb(sumGb), color: AC2 },
           { label: 'Disponível', value: fmtGb(Math.max(0, totalLimit - totalUsed)), color: '#34d399' },
           { label: 'Média / dia (14d)', value: fmtGb(avgGb), color: '#f4f2f8' },
           { label: 'Pico (1 dia)', value: fmtGb(peakGb), color: '#fbbf24' },
