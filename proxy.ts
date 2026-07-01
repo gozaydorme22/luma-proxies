@@ -4,6 +4,7 @@ import { adminAuth } from '@/lib/firebase/admin'
 const PUBLIC_PATHS = [
   '/', '/login', '/cadastro', '/verificar', '/proxy-checker',
   '/api/webhook', '/api/pagamento/webhook', '/api/cron',
+  '/api/products',
   // auth routes that must be reachable before a session cookie exists
   '/api/auth/session', '/api/auth/verify', '/api/auth/reset-unverified',
 ]

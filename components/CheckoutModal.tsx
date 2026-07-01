@@ -12,10 +12,10 @@ interface Plan { gb: string; price: number; label: string; perGb: number }
 
 // Preços base (antes do cupom LUMA30 −30%)
 const FALLBACK_PLANS: Plan[] = [
-  { gb: '3',  price: 27.21,  label: '3 GB',  perGb: 9.07  },
-  { gb: '5',  price: 44.29,  label: '5 GB',  perGb: 8.858 },
-  { gb: '10', price: 87.00,  label: '10 GB', perGb: 8.70  },
-  { gb: '20', price: 172.00, label: '20 GB', perGb: 8.60  },
+  { gb: '3',  price: 29.90,  label: '3 GB',  perGb: 9.97  },
+  { gb: '5',  price: 45.90,  label: '5 GB',  perGb: 9.18  },
+  { gb: '10', price: 87.90,  label: '10 GB', perGb: 8.79  },
+  { gb: '20', price: 173.90, label: '20 GB', perGb: 8.695 },
 ]
 
 function fmt(v: number) {
