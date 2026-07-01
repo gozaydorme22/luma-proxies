@@ -112,6 +112,6 @@ export async function POST(req: NextRequest) {
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Erro ao gerar PIX.'
     console.error('[pix]', msg)
-    return NextResponse.json({ error: msg }, { status: 502 })
+    return NextResponse.json({ error: 'Erro ao gerar o PIX. Verifique seus dados e tente novamente.' }, { status: 502 })
   }
 }

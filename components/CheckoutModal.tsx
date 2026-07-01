@@ -26,6 +26,18 @@ function fmtPerGb(v: number) {
   return `R$ ${v.toFixed(2).replace('.', ',')}/GB`
 }
 
+function validateCpf(d: string): boolean {
+  if (d.length !== 11 || /^(\d)\1{10}$/.test(d)) return false
+  let s = 0
+  for (let i = 0; i < 9; i++) s += +d[i] * (10 - i)
+  let r = (s * 10) % 11; if (r === 10 || r === 11) r = 0
+  if (r !== +d[9]) return false
+  s = 0
+  for (let i = 0; i < 10; i++) s += +d[i] * (11 - i)
+  r = (s * 10) % 11; if (r === 10 || r === 11) r = 0
+  return r === +d[10]
+}
+
 function maskCpf(v: string): string {
   const d = v.replace(/\D/g, '').slice(0, 11)
   if (d.length <= 3) return d
@@ -83,7 +95,7 @@ export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
   const discountAmt = couponApplied ? plan.price * couponDiscountPct : 0
   const total       = plan.price - discountAmt
   const loggedIn    = user !== undefined && user !== null
-  const cpfValid    = cpf.replace(/\D/g, '').length === 11
+  const cpfValid    = validateCpf(cpf.replace(/\D/g, ''))
 
   useEffect(() => {
     document.body.style.overflow = 'hidden'
