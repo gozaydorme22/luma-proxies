@@ -54,7 +54,21 @@ export async function POST() {
         updated++
       }
 
-      // Always record a snapshot for chart history
+      // If no prior snapshots exist and there is usage, insert a zero-baseline
+      // 5 minutes before so the delta appears on the chart immediately
+      const { count: priorCount } = await supabase
+        .from('usage_snapshots')
+        .select('id', { count: 'exact', head: true })
+        .eq('proxy_id', proxy.id)
+        .eq('client_id', uid)
+
+      if ((priorCount ?? 0) === 0 && realUsedGb > 0) {
+        const baseline = new Date(Date.now() - 5 * 60 * 1000).toISOString()
+        await supabase.from('usage_snapshots').insert({
+          proxy_id: proxy.id, client_id: uid, used_gb: 0, snapped_at: baseline,
+        })
+      }
+
       snapshots.push({ proxy_id: proxy.id, client_id: uid, used_gb: realUsedGb, snapped_at: now })
     }
 
