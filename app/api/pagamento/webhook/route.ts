@@ -39,11 +39,14 @@ export async function POST(req: NextRequest) {
   if (!metaB64) return NextResponse.json({ error: 'Missing meta' }, { status: 400 })
 
   interface Meta {
-    uid: string; gb: number; total_brl: number; coupon: string | null;
-    // compact fields (new format)
-    n?: string; ir?: boolean; dp?: number;
-    // legacy fields (old format — kept for in-flight payments)
+    // v3 ultra-compact
+    u?: string; g?: number; t?: number; c?: string;
+    // v2 compact
+    uid?: string; gb?: number; total_brl?: number; coupon?: string | null; dp?: number; ir?: boolean;
+    // v1 legacy
     plan_label?: string; discount_pct?: number; nonce?: string; is_recharge?: boolean;
+    // shared
+    n?: string; r?: number;
   }
   let meta: Meta
   try {
@@ -61,9 +64,14 @@ export async function POST(req: NextRequest) {
 
   const supabase = createServerClient()
 
-  const nonce = meta.n ?? meta.nonce
-  const isRechargeFlag = meta.ir ?? meta.is_recharge ?? false
-  const planLabel = planLabel ?? `${meta.gb} GB`
+  // Resolve all meta fields across v1/v2/v3 formats
+  const uid         = meta.u ?? meta.uid ?? ''
+  const gb          = Number(meta.g ?? meta.gb ?? 0)
+  const totalBrl    = meta.t != null ? meta.t / 100 : (meta.total_brl ?? 0)
+  const coupon      = meta.c ?? meta.coupon ?? null
+  const nonce       = meta.n ?? meta.nonce
+  const isRechargeFlag = meta.r != null ? meta.r !== 0 : (meta.ir ?? meta.is_recharge ?? false)
+  const planLabel   = meta.plan_label ?? `${gb} GB`
   const discountPct = meta.dp ?? meta.discount_pct ?? 0
 
   // Idempotency check — nonce-based (new) with time-window fallback (legacy meta without nonce)
@@ -80,12 +88,12 @@ export async function POST(req: NextRequest) {
     const { count: existingOrders } = await supabase
       .from('orders')
       .select('id', { count: 'exact', head: true })
-      .eq('client_id', meta.uid)
-      .eq('total_brl', meta.total_brl)
+      .eq('client_id', uid)
+      .eq('total_brl', totalBrl)
       .eq('status', 'pago')
       .gte('paid_at', new Date(Date.now() - 10 * 60 * 1000).toISOString())
     if (existingOrders && existingOrders > 0) {
-      console.log('[webhook] duplicate — skipping uid:', meta.uid)
+      console.log('[webhook] duplicate — skipping uid:', uid)
       return NextResponse.json({ ok: true, duplicate: true })
     }
   }
@@ -99,16 +107,16 @@ export async function POST(req: NextRequest) {
     const { data: client } = await supabase
       .from('clients')
       .select('email, name')
-      .eq('id', meta.uid)
+      .eq('id', uid)
       .single()
 
     console.log('[webhook] client lookup:', client ? client.email : 'NOT FOUND')
 
     // Record order
     const { error: orderErr } = await supabase.from('orders').insert({
-      client_id:      meta.uid,
-      quantity:       meta.gb,
-      total_brl:      meta.total_brl,
+      client_id:      uid,
+      quantity:       gb,
+      total_brl:      totalBrl,
       status:         'pago',
       payment_method: isRechargeFlag ? 'pix_recarga' : 'pix_nova',
       paid_at:        new Date().toISOString(),
@@ -123,7 +131,7 @@ export async function POST(req: NextRequest) {
     let proxyPass: string
     let proxyLabel: string
     let proxyId: string | undefined
-    let emailGbLimit: number = Number(meta.gb)
+    let emailGbLimit: number = gb
 
     if (smartproxyEnabled) {
       // Look up existing proxy first — determines username generation for new vs recharge.
@@ -131,7 +139,7 @@ export async function POST(req: NextRequest) {
       const { data: existingProxies } = await supabase
         .from('proxies')
         .select('id, gb_limit, password, username')
-        .eq('assigned_to', meta.uid)
+        .eq('assigned_to', uid)
         .in('status', isRechargeFlag ? ['sold', 'suspended'] : ['sold'])
         .order('sold_at', { ascending: false })
         .limit(1)
@@ -141,7 +149,7 @@ export async function POST(req: NextRequest) {
       // payment nonce (UUID) so it doesn't collide with the existing sub-account on SmartProxy
       const baseUser = (!isRechargeFlag && existingProxy && nonce)
         ? `luma${nonce.slice(0, 8).toLowerCase()}`
-        : makeUsername(meta.uid)
+        : makeUsername(uid)
 
       proxyUser  = connectionUsername(baseUser)
       proxyPass  = makePassword()
@@ -150,22 +158,22 @@ export async function POST(req: NextRequest) {
       proxyLabel = `${planLabel} Residencial BR`
 
       let isRecharge = false
-      let newGbLimit = meta.gb
+      let newGbLimit = gb
 
       if (isRechargeFlag) {
         // Explicit recharge — add GB to existing sub-account on SmartProxy
         isRecharge = true
         const spMgmtUser = existingProxy?.username
           ? mgmtUsername(existingProxy.username)
-          : `smart-${makeUsername(meta.uid)}`
+          : `smart-${makeUsername(uid)}`
         try {
           const subAccounts = await listSubAccounts()
           const existing = subAccounts.find(u => u.username === spMgmtUser)
           const existingLimitGb = existing ? kbToGb(existing.limit_flow ?? 0) : 0
-          const newLimit = existingLimitGb + meta.gb
+          const newLimit = existingLimitGb + gb
           newGbLimit = newLimit
           await updateSubAccount(spMgmtUser, { status: 1, limitGb: newLimit })
-          console.log('[webhook] explicit recharge, new limit:', newLimit, '(was:', existingLimitGb, '+ new:', meta.gb, ')')
+          console.log('[webhook] explicit recharge, new limit:', newLimit, '(was:', existingLimitGb, '+ new:', gb, ')')
         } catch (e2) {
           console.error('[webhook] SmartProxy recharge failed:', e2)
           sendAdminAlert()
@@ -175,7 +183,7 @@ export async function POST(req: NextRequest) {
         // New proxy — create sub-account on SmartProxy
         try {
           console.log('[webhook] creating sub-account:', baseUser)
-          await createSubAccount(baseUser, proxyPass, meta.gb)
+          await createSubAccount(baseUser, proxyPass, gb)
           console.log('[webhook] sub-account created:', proxyUser)
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err)
@@ -183,12 +191,12 @@ export async function POST(req: NextRequest) {
           isRecharge = true
           const spMgmtUser = existingProxy?.username
             ? mgmtUsername(existingProxy.username)
-            : `smart-${makeUsername(meta.uid)}`
+            : `smart-${makeUsername(uid)}`
           try {
             const subAccounts = await listSubAccounts()
             const existing = subAccounts.find(u => u.username === spMgmtUser)
             const existingLimitGb = existing ? kbToGb(existing.limit_flow ?? 0) : 0
-            const newLimit = existingLimitGb + meta.gb
+            const newLimit = existingLimitGb + gb
             newGbLimit = newLimit
             await updateSubAccount(spMgmtUser, { status: 1, limitGb: newLimit })
             console.log('[webhook] fallback recharge, new limit:', newLimit)
@@ -205,7 +213,7 @@ export async function POST(req: NextRequest) {
         proxyUser  = existingProxy.username   // keep same username
         proxyLabel = `${newGbLimit} GB Residencial BR`
       } else if (!isRecharge) {
-        newGbLimit = meta.gb
+        newGbLimit = gb
       }
 
       const proxyRow = {
@@ -215,10 +223,10 @@ export async function POST(req: NextRequest) {
         username:    proxyUser,
         password:    proxyPass,
         gb_limit:    newGbLimit,
-        price:       meta.total_brl,
+        price:       totalBrl,
         proxy_type:  'residencial',
         status:      'sold',
-        assigned_to: meta.uid,
+        assigned_to: uid,
         sold_at:     new Date().toISOString(),
       }
 
@@ -251,7 +259,7 @@ export async function POST(req: NextRequest) {
       }
 
       const { data: claimedRows } = await supabase.from('proxies')
-        .update({ status: 'sold', assigned_to: meta.uid, sold_at: new Date().toISOString() })
+        .update({ status: 'sold', assigned_to: uid, sold_at: new Date().toISOString() })
         .eq('id', stockProxy.id)
         .eq('status', 'available')
         .select('id')
@@ -320,8 +328,8 @@ export async function POST(req: NextRequest) {
     if (client?.email) {
       const name       = client.name || client.email.split('@')[0]
       const discountLabel = discountPct ? ` · −${Math.round(discountPct * 100)}%` : ''
-      const couponLine = meta.coupon
-        ? `<tr><td style="color:rgba(244,242,248,.4);">Cupom</td><td style="color:#34d399;text-align:right;font-family:'Courier New',monospace;">${meta.coupon}${discountLabel}</td></tr>`
+      const couponLine = coupon
+        ? `<tr><td style="color:rgba(244,242,248,.4);">Cupom</td><td style="color:#34d399;text-align:right;font-family:'Courier New',monospace;">${coupon}${discountLabel}</td></tr>`
         : ''
 
       const { error: confErr } = await resend.emails.send({
@@ -352,7 +360,7 @@ export async function POST(req: NextRequest) {
         ${couponLine}
         <tr>
           <td style="color:rgba(244,242,248,.4);">Total pago</td>
-          <td style="color:#a855f7;font-weight:700;font-size:16px;text-align:right;">${fmt(meta.total_brl)}</td>
+          <td style="color:#a855f7;font-weight:700;font-size:16px;text-align:right;">${fmt(totalBrl)}</td>
         </tr>
       </table>
     </div>
@@ -373,11 +381,11 @@ export async function POST(req: NextRequest) {
     void proxyId
 
     // Increment coupon uses_count and record per-user use
-    if (meta.coupon) {
+    if (coupon) {
       const { data: couponRow } = await supabase
         .from('coupons')
         .select('id, uses_count')
-        .eq('code', meta.coupon)
+        .eq('code', coupon)
         .single()
       if (couponRow) {
         await supabase
@@ -387,7 +395,7 @@ export async function POST(req: NextRequest) {
         // Record per-user usage (UNIQUE constraint prevents duplicates)
         await supabase
           .from('coupon_uses')
-          .insert({ coupon_id: couponRow.id, client_id: meta.uid })
+          .insert({ coupon_id: couponRow.id, client_id: uid })
       }
     }
   })
@@ -399,9 +407,9 @@ export async function POST(req: NextRequest) {
       to:      [adminEmail],
       subject: '⚠️ Fulfill falhou — intervenção manual necessária',
       html: `<p>Um pagamento foi confirmado mas o provisionamento da proxy falhou.</p>
-<p><b>Cliente:</b> ${meta.uid}<br>
+<p><b>Cliente:</b> ${uid}<br>
 <b>Plano:</b> ${planLabel}<br>
-<b>Valor:</b> R$ ${meta.total_brl.toFixed(2)}</p>
+<b>Valor:</b> R$ ${totalBrl.toFixed(2)}</p>
 <p>Verifique os logs do Vercel e provisione manualmente.</p>`,
     }).catch(e => console.error('[webhook] admin alert', e))
   }

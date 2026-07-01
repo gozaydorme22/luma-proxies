@@ -82,10 +82,12 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Compact meta keeps the webhook URL under SyncPay's ~176-char query-param limit.
-  // n = 8-hex nonce (replay prevention), ir = is_recharge, dp = discount_pct
+  // v3 ultra-compact meta — SyncPay rejects webhook URLs > ~256 chars total.
+  // Full HMAC (43 chars) + URL prefix (75 chars) leaves ~138 chars for meta.
+  // u=uid  g=gb  t=cents(int)  c=coupon  n=8-hex-nonce  r=is_recharge(0/1)
+  const cents = Math.round(amount * 100)
   const meta = Buffer.from(
-    JSON.stringify({ uid, gb, total_brl: amount, coupon: appliedCoupon, dp: discountPct, n: crypto.randomUUID().replace(/-/g, '').slice(0, 8), ir: !!is_recharge })
+    JSON.stringify({ u: uid, g: gb, t: cents, ...(appliedCoupon ? { c: appliedCoupon } : {}), n: crypto.randomUUID().replace(/-/g, '').slice(0, 8), r: is_recharge ? 1 : 0 })
   ).toString('base64url')
 
   const hmac = createHmac('sha256', process.env.SYNCPAY_WEBHOOK_SECRET ?? '').update(meta).digest('base64url')
