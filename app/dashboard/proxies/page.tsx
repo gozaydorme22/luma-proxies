@@ -68,23 +68,39 @@ export default function ProxiesPage() {
   const [totalRemGb, setTotalRemGb] = useState(0)
   const [tier, setTier]             = useState('Bronze')
   const [loading, setLoading]       = useState(true)
+  const [syncing, setSyncing]       = useState(false)
   const [revealed, setRevealed]     = useState<Record<string, boolean>>({})
   const [search, setSearch]         = useState('')
   const [filter, setFilter]         = useState<'all' | 'ativa' | 'inativa'>('all')
 
+  async function loadProxies() {
+    const d = await fetch('/api/proxies').then(r => r.json()).catch(() => ({}))
+    setProxies(d.proxies ?? [])
+    setUsage14d(d.usage14d ?? new Array(14).fill(0))
+    setUsage7d(d.usage7d   ?? new Array(7).fill(0))
+    setUsage24h(d.usage24h ?? new Array(24).fill(0))
+    setTotalRemGb(d.totalRemainingGb ?? 0)
+    setTier(capitalize(d.client?.tier ?? 'bronze'))
+  }
+
+  async function syncUsage() {
+    setSyncing(true)
+    try {
+      await fetch('/api/proxies/refresh', { method: 'POST' })
+      await loadProxies()
+    } catch { /* ignore */ } finally {
+      setSyncing(false)
+    }
+  }
+
   useEffect(() => {
-    fetch('/api/proxies')
-      .then(r => r.json())
-      .then(d => {
-        setProxies(d.proxies ?? [])
-        setUsage14d(d.usage14d ?? new Array(14).fill(0))
-        setUsage7d(d.usage7d   ?? new Array(7).fill(0))
-        setUsage24h(d.usage24h ?? new Array(24).fill(0))
-        setTotalRemGb(d.totalRemainingGb ?? 0)
-        setTier(capitalize(d.client?.tier ?? 'bronze'))
-      })
+    loadProxies()
       .catch(() => null)
       .finally(() => setLoading(false))
+    // Sync usage from SmartProxy in the background on page load
+    fetch('/api/proxies/refresh', { method: 'POST' })
+      .then(() => loadProxies())
+      .catch(() => null)
   }, [])
 
   const firstName = user?.displayName?.split(' ')[0] ?? user?.email?.split('@')[0] ?? 'usuário'
@@ -292,8 +308,16 @@ export default function ProxiesPage() {
                 </div>
 
                 <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+                  <button
+                    onClick={syncUsage}
+                    disabled={syncing}
+                    title="Atualizar consumo"
+                    style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.12)', color: '#f4f2f8', borderRadius: 10, padding: '11px 14px', cursor: syncing ? 'not-allowed' : 'pointer', opacity: syncing ? .5 : 1 }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: syncing ? 'lumaSpin 1s linear infinite' : 'none' }}><path d="M21 12a9 9 0 1 1-2.6-6.3M21 4v5h-5"/></svg>
+                  </button>
                   <Link href="?checkout=1" style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.12)', color: '#f4f2f8', fontWeight: 700, fontSize: 13, padding: 11, borderRadius: 10, textDecoration: 'none' }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.3M21 4v5h-5"/></svg>Recarregar
+                    Recarregar
                   </Link>
                   <Link href={`/dashboard/proxies/${p.id}`} style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: AC, color: '#0a0612', fontWeight: 800, fontSize: 13, padding: 11, borderRadius: 10, textDecoration: 'none' }}>
                     Gerenciar <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
