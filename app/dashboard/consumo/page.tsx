@@ -83,7 +83,7 @@ export default function ConsumoPage() {
       <div className="dash-section" style={{ border: '1px solid rgba(255,255,255,.08)', background: 'rgba(255,255,255,.02)', borderRadius: 18, padding: '22px 24px', marginTop: 16 }}>
         <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, letterSpacing: '.14em', color: 'rgba(244,242,248,.45)', textTransform: 'uppercase' }}>Histórico · últimos 14 dias</div>
         {sumGb === 0 && !loading && (
-          <p style={{ fontSize: 13, color: 'rgba(244,242,248,.35)', marginTop: 12 }}>Histórico disponível após integração com API do fornecedor.</p>
+          <p style={{ fontSize: 13, color: 'rgba(244,242,248,.35)', marginTop: 12 }}>Nenhum consumo registrado neste período.</p>
         )}
         <div style={{ marginTop: 18 }}>
           <svg viewBox="0 0 720 220" preserveAspectRatio="none" style={{ width: '100%', height: 220, display: 'block' }}>
