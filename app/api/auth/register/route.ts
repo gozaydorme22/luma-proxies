@@ -1,19 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { adminAuth } from '@/lib/firebase/admin'
+import { headers } from 'next/headers'
 import { createServerClient } from '@/lib/supabase/server'
 import { sendWelcomeEmail } from '@/lib/email'
 
 export async function POST(req: NextRequest) {
   try {
-    const token = req.cookies.get('__session')?.value
-    if (!token) return NextResponse.json({ error: 'unauthenticated' }, { status: 401 })
+    const hdrs = await headers()
+    const uid  = hdrs.get('x-uid')
+    if (!uid) return NextResponse.json({ error: 'unauthenticated' }, { status: 401 })
 
-    const decoded = await adminAuth.verifyIdToken(token)
     const { name, email } = await req.json() as { name: string; email: string }
 
     const supabase = createServerClient()
     const { error } = await supabase.from('clients').insert({
-      id:    decoded.uid,
+      id:    uid,
       email: email,
       name:  name,
     })
@@ -22,7 +22,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // Envia e-mail de boas-vindas (não bloqueia a resposta se falhar)
     sendWelcomeEmail(email, name || email).catch(() => null)
 
     return NextResponse.json({ ok: true })

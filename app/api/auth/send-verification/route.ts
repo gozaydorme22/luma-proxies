@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { adminAuth } from '@/lib/firebase/admin'
+import { headers } from 'next/headers'
 import { createServerClient } from '@/lib/supabase/server'
 import { Resend } from 'resend'
 
@@ -12,28 +12,19 @@ function genCode() {
 
 export async function POST(req: NextRequest) {
   try {
-    const token = req.cookies.get('__session')?.value
-    if (!token) return NextResponse.json({ error: 'unauthenticated' }, { status: 401 })
+    const hdrs = await headers()
+    const uid  = hdrs.get('x-uid')
+    if (!uid) return NextResponse.json({ error: 'unauthenticated' }, { status: 401 })
 
-    // Step 1: verify Firebase token
-    let decoded: Awaited<ReturnType<typeof adminAuth.verifyIdToken>>
-    try {
-      decoded = await adminAuth.verifyIdToken(token)
-    } catch (e) {
-      console.error('[send-verification] STEP 1 verifyIdToken FAILED:', e)
-      return NextResponse.json({ error: `verifyIdToken: ${String(e)}` }, { status: 500 })
-    }
-
-    const { name, email: bodyEmail } = await req.json() as { name: string; email: string }
-    // Always use the email from the verified Firebase token — never trust the request body
-    const email = decoded.email ?? bodyEmail
-    console.log('[send-verification] uid:', decoded.uid, 'email:', email)
+    const { name, email } = await req.json() as { name: string; email: string }
+    if (!email) return NextResponse.json({ error: 'Email obrigatório' }, { status: 400 })
+    console.log('[send-verification] uid:', uid, 'email:', email)
 
     const supabase = createServerClient()
 
     // Step 2: upsert client in Supabase
     try {
-      const { error: insertErr } = await supabase.from('clients').insert({ id: decoded.uid, email, name })
+      const { error: insertErr } = await supabase.from('clients').insert({ id: uid, email, name })
       if (insertErr && insertErr.code !== '23505') {
         console.error('[send-verification] STEP 2 insert client FAILED:', insertErr)
         return NextResponse.json({ error: `supabase insert: ${insertErr.message}` }, { status: 500 })
@@ -47,7 +38,7 @@ export async function POST(req: NextRequest) {
     const { data: recentCode } = await supabase
       .from('verification_codes')
       .select('created_at')
-      .eq('uid', decoded.uid)
+      .eq('uid', uid)
       .eq('used', false)
       .gte('created_at', new Date(Date.now() - 60_000).toISOString())
       .limit(1)
@@ -62,7 +53,7 @@ export async function POST(req: NextRequest) {
       await supabase
         .from('verification_codes')
         .update({ used: true })
-        .eq('uid', decoded.uid)
+        .eq('uid', uid)
         .eq('used', false)
     } catch (e) {
       console.error('[send-verification] STEP 3 invalidate codes THREW:', e)
@@ -74,7 +65,7 @@ export async function POST(req: NextRequest) {
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString()
     try {
       const { error: codeErr } = await supabase.from('verification_codes').insert({
-        uid:        decoded.uid,
+        uid:        uid,
         email,
         code,
         expires_at: expiresAt,

@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth } from '@/lib/firebase/admin'
 
-const PUBLIC_PATHS = ['/', '/login', '/cadastro', '/verificar', '/api/webhook', '/api/auth', '/api/pagamento/webhook', '/api/cron', '/proxy-checker']
+const PUBLIC_PATHS = [
+  '/', '/login', '/cadastro', '/verificar', '/proxy-checker',
+  '/api/webhook', '/api/pagamento/webhook', '/api/cron',
+  // auth routes that must be reachable before a session cookie exists
+  '/api/auth/session', '/api/auth/verify', '/api/auth/reset-unverified',
+]
 const ADMIN_PREFIX = '/admin'
 
 async function proxy(req: NextRequest) {

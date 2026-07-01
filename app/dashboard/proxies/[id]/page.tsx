@@ -17,11 +17,15 @@ interface ProxyDetail {
 
 function CopyBtn({ value, label }: { value: string; label?: string }) {
   const [ok, setOk] = useState(false)
-  function copy() {
-    navigator.clipboard.writeText(value)
-    setOk(true)
-    toast(label ? `${label} copiado!` : 'Copiado!', 'success')
-    setTimeout(() => setOk(false), 1500)
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(value)
+      setOk(true)
+      toast(label ? `${label} copiado!` : 'Copiado!', 'success')
+      setTimeout(() => setOk(false), 1500)
+    } catch {
+      toast('Não foi possível copiar', 'error')
+    }
   }
   return (
     <button onClick={copy} title="Copiar" style={{
@@ -71,7 +75,9 @@ export default function ProxyDetailPage({ params }: { params: Promise<{ id: stri
   const pct       = proxy.allocatedGb > 0 ? Math.min(100, Math.round((proxy.usedGb / proxy.allocatedGb) * 100)) : 0
   const remaining = Math.max(0, proxy.allocatedGb - proxy.usedGb)
   const barColor  = pct >= 95 ? '#f87171' : pct >= 75 ? '#fbbf24' : '#34d399'
-  const isActive  = proxy.status === 'active'
+  const isActive   = proxy.status === 'active'
+  const isSuspended = proxy.status === 'suspended' || proxy.status === 'suspensa'
+  const statusLabel = isActive ? 'Ativa' : isSuspended ? 'Suspensa' : proxy.status === 'removed' ? 'Removida' : 'Inativa'
 
   return (
     <div style={{ animation: 'lumaRise .35s ease both', maxWidth: 560 }}>
@@ -87,7 +93,7 @@ export default function ProxyDetailPage({ params }: { params: Promise<{ id: stri
         <span style={{ width: 10, height: 10, borderRadius: '50%', background: isActive ? '#34d399' : '#f87171', boxShadow: `0 0 8px ${isActive ? '#34d399' : '#f87171'}`, flexShrink: 0 }}/>
         <h1 style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 600, fontSize: 20, margin: 0 }}>{proxy.name}</h1>
         <span style={{ fontSize: 11, fontFamily: "'JetBrains Mono',monospace", letterSpacing: '.06em', padding: '3px 9px', borderRadius: 6, background: `color-mix(in srgb,${AC} 18%,transparent)`, color: AC2 }}>
-          {isActive ? 'Ativa' : 'Suspensa'}
+          {statusLabel}
         </span>
       </div>
 

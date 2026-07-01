@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { headers } from 'next/headers'
 import { adminAuth } from '@/lib/firebase/admin'
 import { createServerClient } from '@/lib/supabase/server'
 
 export async function POST(req: NextRequest) {
   try {
-    const token = req.cookies.get('__session')?.value
-    if (!token) return NextResponse.json({ error: 'unauthenticated' }, { status: 401 })
+    const hdrs = await headers()
+    const uid  = hdrs.get('x-uid')
+    if (!uid) return NextResponse.json({ error: 'unauthenticated' }, { status: 401 })
 
-    const decoded = await adminAuth.verifyIdToken(token)
     const { code } = await req.json() as { code: string }
 
     const supabase = createServerClient()
@@ -15,7 +16,7 @@ export async function POST(req: NextRequest) {
     const { data: row } = await supabase
       .from('verification_codes')
       .select('id, code, expires_at, used')
-      .eq('uid', decoded.uid)
+      .eq('uid', uid)
       .eq('used', false)
       .order('created_at', { ascending: false })
       .limit(1)
@@ -25,16 +26,12 @@ export async function POST(req: NextRequest) {
     if (row.used) return NextResponse.json({ error: 'Código já utilizado.' }, { status: 400 })
     if (new Date(row.expires_at) < new Date()) return NextResponse.json({ error: 'Código expirado. Solicite um novo.' }, { status: 400 })
     if (row.code !== code) {
-      // Invalidate on wrong attempt — prevents brute-force
       await supabase.from('verification_codes').update({ used: true }).eq('id', row.id)
       return NextResponse.json({ error: 'Código incorreto. Solicite um novo.' }, { status: 400 })
     }
 
-    // Marca como usado
     await supabase.from('verification_codes').update({ used: true }).eq('id', row.id)
-
-    // Marca e-mail como verificado no Firebase
-    await adminAuth.updateUser(decoded.uid, { emailVerified: true })
+    await adminAuth.updateUser(uid, { emailVerified: true })
 
     return NextResponse.json({ ok: true })
   } catch (e) {

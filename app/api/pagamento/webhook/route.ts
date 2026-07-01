@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse, after } from 'next/server'
-import { createHmac } from 'crypto'
+import { createHmac, timingSafeEqual } from 'crypto'
 import { createServerClient } from '@/lib/supabase/server'
 import { Resend } from 'resend'
 import {
@@ -28,8 +28,12 @@ export async function POST(req: NextRequest) {
 
   const metaB64 = searchParams.get('m')
   const sig     = searchParams.get('s')
-  const expectedSig = createHmac('sha256', process.env.SYNCPAY_WEBHOOK_SECRET ?? '').update(metaB64 ?? '').digest('base64url')
-  if (!sig || sig !== expectedSig) {
+  const secret = process.env.SYNCPAY_WEBHOOK_SECRET
+  if (!secret) return NextResponse.json({ error: 'Misconfigured' }, { status: 500 })
+  const expectedSig = createHmac('sha256', secret).update(metaB64 ?? '').digest('base64url')
+  const sigBuf      = Buffer.from(sig ?? '')
+  const expBuf      = Buffer.from(expectedSig)
+  if (!sig || sigBuf.length !== expBuf.length || !timingSafeEqual(sigBuf, expBuf)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
   if (!metaB64) return NextResponse.json({ error: 'Missing meta' }, { status: 400 })
@@ -199,10 +203,17 @@ export async function POST(req: NextRequest) {
         return
       }
 
-      await supabase.from('proxies')
+      const { count: claimedCount } = await supabase.from('proxies')
         .update({ status: 'sold', assigned_to: meta.uid, sold_at: new Date().toISOString() })
         .eq('id', stockProxy.id)
         .eq('status', 'available')
+        .select('id', { count: 'exact', head: true })
+
+      if (!claimedCount || claimedCount === 0) {
+        console.error('[webhook] proxy claim race — another webhook claimed this proxy')
+        sendAdminAlert()
+        return
+      }
 
       proxyHost  = stockProxy.host
       proxyPort  = stockProxy.port

@@ -93,12 +93,19 @@ export default function ProxiesPage() {
   useEffect(() => { setHoverIdx(null) }, [range])
 
   async function loadProxies() {
-    const d = await fetch('/api/proxies').then(r => r.json()).catch(() => ({}))
-    setProxies(d.proxies ?? [])
-    setUsage14d(d.usage14d ?? new Array(14).fill(0))
-    setUsage7d(d.usage7d   ?? new Array(7).fill(0))
-    setUsage24h(d.usage24h ?? new Array(24).fill(0))
-    setTotalRemGb(d.totalRemainingGb ?? 0)
+    try {
+      const res = await fetch('/api/proxies')
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const d = await res.json()
+      setProxies(d.proxies ?? [])
+      setUsage14d(d.usage14d ?? new Array(14).fill(0))
+      setUsage7d(d.usage7d   ?? new Array(7).fill(0))
+      setUsage24h(d.usage24h ?? new Array(24).fill(0))
+      setTotalRemGb(d.totalRemainingGb ?? 0)
+    } catch (e) {
+      console.error('[loadProxies]', e)
+      toast('Erro ao carregar proxies. Recarregue a página.', 'error')
+    }
   }
 
   async function removeProxy(id: string) {
@@ -375,7 +382,7 @@ export default function ProxiesPage() {
                       <span style={{ color: 'rgba(244,242,248,.5)' }}>Usuário</span>
                       <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                         <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, color: 'rgba(244,242,248,.8)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 150 }}>{p.proxyUser}</span>
-                        <button onClick={() => navigator.clipboard.writeText(p.proxyUser!)} style={iconBtn}>
+                        <button onClick={() => navigator.clipboard.writeText(p.proxyUser!).catch(() => toast('Não foi possível copiar', 'error'))} style={iconBtn}>
                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
                         </button>
                       </span>
