@@ -38,20 +38,31 @@ export async function POST() {
     )
 
     let updated = 0
+    const now = new Date().toISOString()
+    const snapshots: { proxy_id: string; client_id: string; used_gb: number; snapped_at: string }[] = []
+
     for (const proxy of proxies) {
       const lookupKey  = mgmtUsername(proxy.username)
       const realUsedGb = usageMap.get(lookupKey)
       if (realUsedGb === undefined) continue
-      if (realUsedGb === Number(proxy.used_gb)) continue
 
-      await supabase
-        .from('proxies')
-        .update({ used_gb: realUsedGb })
-        .eq('id', proxy.id)
-      updated++
+      if (realUsedGb !== Number(proxy.used_gb)) {
+        await supabase
+          .from('proxies')
+          .update({ used_gb: realUsedGb })
+          .eq('id', proxy.id)
+        updated++
+      }
+
+      // Always record a snapshot for chart history
+      snapshots.push({ proxy_id: proxy.id, client_id: uid, used_gb: realUsedGb, snapped_at: now })
     }
 
-    return NextResponse.json({ synced: true, updated })
+    if (snapshots.length > 0) {
+      await supabase.from('usage_snapshots').insert(snapshots)
+    }
+
+    return NextResponse.json({ synced: true, updated, snapshots: snapshots.length })
   } catch (err) {
     console.error('[proxies/refresh]', err instanceof Error ? err.message : err)
     return NextResponse.json({ synced: false, reason: 'smartproxy_error' })
