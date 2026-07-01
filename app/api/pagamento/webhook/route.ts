@@ -38,7 +38,13 @@ export async function POST(req: NextRequest) {
   }
   if (!metaB64) return NextResponse.json({ error: 'Missing meta' }, { status: 400 })
 
-  interface Meta { uid: string; gb: number; plan_label: string; total_brl: number; coupon: string | null; discount_pct?: number; nonce?: string; is_recharge?: boolean }
+  interface Meta {
+    uid: string; gb: number; total_brl: number; coupon: string | null;
+    // compact fields (new format)
+    n?: string; ir?: boolean; dp?: number;
+    // legacy fields (old format — kept for in-flight payments)
+    plan_label?: string; discount_pct?: number; nonce?: string; is_recharge?: boolean;
+  }
   let meta: Meta
   try {
     meta = JSON.parse(Buffer.from(metaB64, 'base64url').toString()) as Meta
@@ -55,14 +61,19 @@ export async function POST(req: NextRequest) {
 
   const supabase = createServerClient()
 
+  const nonce = meta.n ?? meta.nonce
+  const isRechargeFlag = meta.ir ?? meta.is_recharge ?? false
+  const planLabel = planLabel ?? `${meta.gb} GB`
+  const discountPct = meta.dp ?? meta.discount_pct ?? 0
+
   // Idempotency check — nonce-based (new) with time-window fallback (legacy meta without nonce)
-  if (meta.nonce) {
+  if (nonce) {
     const { count: nonceCount } = await supabase
       .from('orders')
       .select('id', { count: 'exact', head: true })
-      .eq('payment_nonce', meta.nonce)
+      .eq('payment_nonce', nonce)
     if (nonceCount && nonceCount > 0) {
-      console.log('[webhook] duplicate nonce — skipping:', meta.nonce)
+      console.log('[webhook] duplicate nonce — skipping:', nonce)
       return NextResponse.json({ ok: true, duplicate: true })
     }
   } else {
@@ -99,9 +110,9 @@ export async function POST(req: NextRequest) {
       quantity:       meta.gb,
       total_brl:      meta.total_brl,
       status:         'pago',
-      payment_method: meta.is_recharge ? 'pix_recarga' : 'pix_nova',
+      payment_method: isRechargeFlag ? 'pix_recarga' : 'pix_nova',
       paid_at:        new Date().toISOString(),
-      ...(meta.nonce ? { payment_nonce: meta.nonce } : {}),
+      ...(nonce ? { payment_nonce: nonce } : {}),
     })
     if (orderErr) console.error('[webhook] order insert:', orderErr.message)
 
@@ -121,27 +132,27 @@ export async function POST(req: NextRequest) {
         .from('proxies')
         .select('id, gb_limit, password, username')
         .eq('assigned_to', meta.uid)
-        .in('status', meta.is_recharge ? ['sold', 'suspended'] : ['sold'])
+        .in('status', isRechargeFlag ? ['sold', 'suspended'] : ['sold'])
         .order('sold_at', { ascending: false })
         .limit(1)
       const existingProxy = existingProxies?.[0] ?? null
 
       // When creating a new proxy while user already has one, derive username from the
       // payment nonce (UUID) so it doesn't collide with the existing sub-account on SmartProxy
-      const baseUser = (!meta.is_recharge && existingProxy && meta.nonce)
-        ? `luma${meta.nonce.replace(/-/g, '').slice(0, 8).toLowerCase()}`
+      const baseUser = (!isRechargeFlag && existingProxy && nonce)
+        ? `luma${nonce.slice(0, 8).toLowerCase()}`
         : makeUsername(meta.uid)
 
       proxyUser  = connectionUsername(baseUser)
       proxyPass  = makePassword()
       proxyHost  = GATEWAY_HOST
       proxyPort  = GATEWAY_PORT
-      proxyLabel = `${meta.plan_label} Residencial BR`
+      proxyLabel = `${planLabel} Residencial BR`
 
       let isRecharge = false
       let newGbLimit = meta.gb
 
-      if (meta.is_recharge) {
+      if (isRechargeFlag) {
         // Explicit recharge — add GB to existing sub-account on SmartProxy
         isRecharge = true
         const spMgmtUser = existingProxy?.username
@@ -265,7 +276,7 @@ export async function POST(req: NextRequest) {
       const { error: credErr } = await resend.emails.send({
         from:    FROM,
         to:      [client.email],
-        subject: `Sua proxy está pronta — ${meta.plan_label} · Luma Proxys`,
+        subject: `Sua proxy está pronta — ${planLabel} · Luma Proxys`,
         html: `<!DOCTYPE html><html lang="pt-BR"><body style="margin:0;padding:40px 20px;background:#08070c;font-family:'Helvetica Neue',Arial,sans-serif;color:#f4f2f8;">
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
 <table width="480" cellpadding="0" cellspacing="0" style="max-width:480px;width:100%;">
@@ -308,7 +319,7 @@ export async function POST(req: NextRequest) {
     // Payment confirmation email
     if (client?.email) {
       const name       = client.name || client.email.split('@')[0]
-      const discountLabel = meta.discount_pct ? ` · −${Math.round(meta.discount_pct * 100)}%` : ''
+      const discountLabel = discountPct ? ` · −${Math.round(discountPct * 100)}%` : ''
       const couponLine = meta.coupon
         ? `<tr><td style="color:rgba(244,242,248,.4);">Cupom</td><td style="color:#34d399;text-align:right;font-family:'Courier New',monospace;">${meta.coupon}${discountLabel}</td></tr>`
         : ''
@@ -316,7 +327,7 @@ export async function POST(req: NextRequest) {
       const { error: confErr } = await resend.emails.send({
         from:    FROM,
         to:      [client.email],
-        subject: `Pagamento confirmado — ${meta.plan_label} · Luma Proxys`,
+        subject: `Pagamento confirmado — ${planLabel} · Luma Proxys`,
         html: `<!DOCTYPE html><html lang="pt-BR"><body style="margin:0;padding:40px 20px;background:#08070c;font-family:'Helvetica Neue',Arial,sans-serif;color:#f4f2f8;">
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
 <table width="480" cellpadding="0" cellspacing="0" style="max-width:480px;width:100%;">
@@ -332,7 +343,7 @@ export async function POST(req: NextRequest) {
       <table width="100%" cellpadding="8" cellspacing="0" style="font-size:14px;">
         <tr>
           <td style="color:rgba(244,242,248,.4);">Plano</td>
-          <td style="color:#f4f2f8;text-align:right;font-weight:600;">${meta.plan_label} Residencial Rotativa</td>
+          <td style="color:#f4f2f8;text-align:right;font-weight:600;">${planLabel} Residencial Rotativa</td>
         </tr>
         <tr>
           <td style="color:rgba(244,242,248,.4);">Método</td>
@@ -389,7 +400,7 @@ export async function POST(req: NextRequest) {
       subject: '⚠️ Fulfill falhou — intervenção manual necessária',
       html: `<p>Um pagamento foi confirmado mas o provisionamento da proxy falhou.</p>
 <p><b>Cliente:</b> ${meta.uid}<br>
-<b>Plano:</b> ${meta.plan_label}<br>
+<b>Plano:</b> ${planLabel}<br>
 <b>Valor:</b> R$ ${meta.total_brl.toFixed(2)}</p>
 <p>Verifique os logs do Vercel e provisione manualmente.</p>`,
     }).catch(e => console.error('[webhook] admin alert', e))

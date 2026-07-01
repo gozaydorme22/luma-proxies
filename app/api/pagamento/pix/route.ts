@@ -67,8 +67,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const plan_label = `${gb} GB`
-
   if (whatsapp) {
     await supabase.from('clients').update({ whatsapp }).eq('id', uid)
   }
@@ -84,8 +82,10 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Compact meta keeps the webhook URL under SyncPay's ~176-char query-param limit.
+  // n = 8-hex nonce (replay prevention), ir = is_recharge, dp = discount_pct
   const meta = Buffer.from(
-    JSON.stringify({ uid, gb, plan_label, total_brl: amount, coupon: appliedCoupon, discount_pct: discountPct, nonce: crypto.randomUUID(), is_recharge: !!is_recharge })
+    JSON.stringify({ uid, gb, total_brl: amount, coupon: appliedCoupon, dp: discountPct, n: crypto.randomUUID().replace(/-/g, '').slice(0, 8), ir: !!is_recharge })
   ).toString('base64url')
 
   const hmac = createHmac('sha256', process.env.SYNCPAY_WEBHOOK_SECRET ?? '').update(meta).digest('base64url')
@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
   try {
     const result = await createPixCashIn({
       amount,
-      description: `Luma Proxys - ${plan_label}`,
+      description: `Luma Proxys - ${gb} GB`,
       webhookUrl,
       client: {
         name:  client.name || client.email.split('@')[0],
@@ -106,10 +106,6 @@ export async function POST(req: NextRequest) {
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Erro ao gerar PIX.'
     console.error('[pix]', msg)
-    const isCpfError = msg.toLowerCase().includes('cpf') || msg.includes('500')
-    const userMsg = isCpfError
-      ? 'Não foi possível gerar o PIX com esse CPF. Tente com outro CPF ou entre em contato com o suporte.'
-      : 'Erro ao gerar o PIX. Tente novamente em alguns instantes.'
-    return NextResponse.json({ error: userMsg }, { status: 502 })
+    return NextResponse.json({ error: 'Erro ao gerar o PIX. Tente novamente em alguns instantes.' }, { status: 502 })
   }
 }
