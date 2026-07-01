@@ -49,7 +49,9 @@ export default function AdminPedidosPage() {
   const [loading, setLoading]     = useState(true)
   const [search, setSearch]       = useState('')
   const [filterS, setFilterS]     = useState('')
-  const [cancelling, setCancelling] = useState<string | null>(null)
+  const [cancelling, setCancelling]   = useState<string | null>(null)
+  const [deleting, setDeleting]       = useState<string | null>(null)
+  const [bulkDeleting, setBulkDeleting] = useState(false)
 
   function loadOrders() {
     fetch('/api/admin/orders')
@@ -60,6 +62,31 @@ export default function AdminPedidosPage() {
   }
 
   useEffect(() => { loadOrders() }, [])
+
+  async function handleDelete(id: string) {
+    if (!confirm('Excluir este pedido permanentemente?')) return
+    setDeleting(id)
+    try {
+      await fetch(`/api/admin/orders/${id}`, { method: 'DELETE' })
+      loadOrders()
+    } finally {
+      setDeleting(null)
+    }
+  }
+
+  async function handleBulkDelete(status: string) {
+    const label = status === 'pago' ? 'pagos' : status
+    if (!confirm(`Excluir TODOS os pedidos ${label}? Esta ação não pode ser desfeita.`)) return
+    setBulkDeleting(true)
+    try {
+      const res  = await fetch(`/api/admin/orders?status=${status}`, { method: 'DELETE' })
+      const data = await res.json()
+      alert(`${data.deleted} pedido(s) excluído(s).`)
+      loadOrders()
+    } finally {
+      setBulkDeleting(false)
+    }
+  }
 
   async function handleCancel(id: string) {
     if (!confirm('Cancelar este pedido? A proxy será devolvida ao estoque.')) return
@@ -86,7 +113,19 @@ export default function AdminPedidosPage() {
 
   return (
     <DashboardShell isAdmin userName="Admin">
-      <TopBar title="Pedidos" sub={loading ? 'Carregando...' : `${orders.length} pedidos no total`} />
+      <TopBar
+        title="Pedidos"
+        sub={loading ? 'Carregando...' : `${orders.length} pedidos no total`}
+        actions={
+          <button
+            onClick={() => handleBulkDelete('pago')}
+            disabled={bulkDeleting}
+            className="text-xs font-bold px-4 py-2 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-40 cursor-pointer"
+          >
+            {bulkDeleting ? 'Excluindo...' : 'Excluir todos os pagos'}
+          </button>
+        }
+      />
       <div className="p-6 flex flex-col gap-4">
         <div className="flex gap-3">
           <div className="flex-1">
@@ -131,15 +170,25 @@ export default function AdminPedidosPage() {
                       <Badge variant={statusVariant(o.status)} dot>{statusLabel(o.status)}</Badge>
                     </td>
                     <td className="px-4 py-3">
-                      {o.status !== 'cancelado' && o.status !== 'reembolsado' && (
+                      <div className="flex gap-2 items-center">
+                        {o.status !== 'cancelado' && o.status !== 'reembolsado' && (
+                          <button
+                            onClick={() => handleCancel(o.id)}
+                            disabled={cancelling === o.id}
+                            className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-(--red)/30 text-(--red) hover:bg-(--red)/10 transition-colors disabled:opacity-40 cursor-pointer"
+                          >
+                            {cancelling === o.id ? '...' : 'Cancelar'}
+                          </button>
+                        )}
                         <button
-                          onClick={() => handleCancel(o.id)}
-                          disabled={cancelling === o.id}
-                          className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-(--red)/30 text-(--red) hover:bg-(--red)/10 transition-colors disabled:opacity-40 cursor-pointer"
+                          onClick={() => handleDelete(o.id)}
+                          disabled={deleting === o.id}
+                          className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-red-800/40 text-red-600 hover:bg-red-900/20 transition-colors disabled:opacity-40 cursor-pointer"
+                          title="Excluir permanentemente"
                         >
-                          {cancelling === o.id ? '...' : 'Cancelar'}
+                          {deleting === o.id ? '...' : '🗑'}
                         </button>
-                      )}
+                      </div>
                     </td>
                   </tr>
                 ))}
