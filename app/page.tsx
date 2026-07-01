@@ -833,6 +833,9 @@ export default function LandingPage() {
                         <span style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 600, fontSize: 18, color: s.color }}>{s.val}</span>
                       </div>
                     ))}
+                    <Link href="/dashboard" onClick={() => setModalOpen(false)} style={{ display: 'block', textAlign: 'center', background: AC, color: '#0a0612', fontFamily: "'Archivo',sans-serif", fontWeight: 700, fontSize: 13.5, padding: '11px 0', borderRadius: 12, textDecoration: 'none', marginTop: 4 }}>
+                      Ir para o dashboard
+                    </Link>
                   </div>
                 )}
 
@@ -918,6 +921,9 @@ export default function LandingPage() {
                         </div>
                       )
                     })}
+                    <Link href="/dashboard" onClick={() => setModalOpen(false)} style={{ display: 'block', textAlign: 'center', background: AC, color: '#0a0612', fontFamily: "'Archivo',sans-serif", fontWeight: 700, fontSize: 13.5, padding: '11px 0', borderRadius: 12, textDecoration: 'none', marginTop: 4 }}>
+                      Ir para o dashboard
+                    </Link>
                   </div>
                 )}
 
