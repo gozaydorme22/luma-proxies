@@ -311,8 +311,29 @@ export default function LandingPage() {
       .catch(() => setCouponEligible(false))
   }, [user])
 
-  // Show for logged-out users (incentive to sign up) and logged-in eligible users
   const showCouponBanner = user === null || couponEligible === true
+
+  // Popup LUMA30
+  const [showPopup, setShowPopup]     = useState(false)
+  const [popupCopied, setPopupCopied] = useState(false)
+
+  useEffect(() => {
+    if (sessionStorage.getItem('luma30_seen')) return
+    const t = setTimeout(() => setShowPopup(true), 3000)
+    return () => clearTimeout(t)
+  }, [])
+
+  function dismissPopup() {
+    setShowPopup(false)
+    sessionStorage.setItem('luma30_seen', '1')
+  }
+
+  function copyLuma30() {
+    navigator.clipboard.writeText('LUMA30').then(() => {
+      setPopupCopied(true)
+      setTimeout(() => setPopupCopied(false), 2500)
+    })
+  }
 
   return (
     <div style={{ position: 'relative', overflow: 'hidden', background: '#08070c', color: '#f4f2f8', fontFamily: "'Manrope',system-ui,sans-serif", WebkitFontSmoothing: 'antialiased' }}>
@@ -507,10 +528,10 @@ export default function LandingPage() {
               <div className="panel-hover" style={{ maxWidth: 760, margin: '30px auto 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap', border: `1px solid color-mix(in srgb,${AC} 28%,transparent)`, background: `color-mix(in srgb,${AC} 9%,transparent)`, borderRadius: 14, padding: '14px 20px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 11, fontSize: 14.5 }}>
                   <span style={{ fontSize: 18 }}>🎁</span>
-                  <span>Primeira compra com 10% off — cupom <b style={{ color: '#fff', fontFamily: "'JetBrains Mono',monospace" }}>LUMA10</b> aplicado automaticamente no checkout</span>
+                  <span>Use o cupom <b style={{ color: '#fff', fontFamily: "'JetBrains Mono',monospace" }}>LUMA30</b> e ganhe <b style={{ color: '#fff' }}>30% de desconto</b> na sua compra</span>
                 </div>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(52,211,153,.12)', border: '1px solid rgba(52,211,153,.25)', borderRadius: 8, padding: '7px 13px', fontFamily: "'JetBrains Mono',monospace", fontSize: 11, fontWeight: 600, color: '#34d399', letterSpacing: '.08em' }}>
-                  ✓ LUMA10
+                  ✓ LUMA30
                 </span>
               </div>
             </Reveal>
@@ -518,10 +539,10 @@ export default function LandingPage() {
 
           <div className="cards-4">
             {[
-              { gb: '3',  price: 'R$ 18,90',  perGb: 'R$ 6,30/GB',  highlight: false, badge: null },
-              { gb: '5',  price: 'R$ 31,90',  perGb: 'R$ 6,38/GB',  highlight: true,  badge: 'MAIS VENDIDO' },
-              { gb: '10', price: 'R$ 60,90',  perGb: 'R$ 6,09/GB',  highlight: false, badge: null },
-              { gb: '20', price: 'R$ 120,90', perGb: 'R$ 6,05/GB',  highlight: false, badge: 'MELHOR PREÇO' },
+              { gb: '3',  price: 'R$ 24,90',  perGb: 'R$ 8,30/GB',  highlight: false, badge: null },
+              { gb: '5',  price: 'R$ 41,90',  perGb: 'R$ 8,38/GB',  highlight: true,  badge: 'MAIS VENDIDO' },
+              { gb: '10', price: 'R$ 79,90',  perGb: 'R$ 7,99/GB',  highlight: false, badge: null },
+              { gb: '20', price: 'R$ 157,90', perGb: 'R$ 7,90/GB',  highlight: false, badge: 'MELHOR PREÇO' },
             ].map((p, i) => {
               return (
               <Reveal key={p.gb} delay={i * 80}>
@@ -985,6 +1006,70 @@ export default function LandingPage() {
           </div>
         )
       })()}
+
+      {/* POPUP LUMA30 */}
+      {showPopup && (
+        <div
+          onClick={dismissPopup}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(8,7,12,.85)', backdropFilter: 'blur(14px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ position: 'relative', background: 'linear-gradient(160deg, #16121f 0%, #0e0b18 100%)', border: `1px solid color-mix(in srgb,${AC} 35%,transparent)`, borderRadius: 28, padding: '48px 40px 36px', width: '100%', maxWidth: 420, textAlign: 'center', boxShadow: `0 0 100px color-mix(in srgb,${AC} 18%,transparent), 0 40px 80px rgba(0,0,0,.7)`, animation: 'lumaRise .35s cubic-bezier(.22,1,.36,1)' }}
+          >
+            {/* Glow aura */}
+            <div style={{ position: 'absolute', top: -80, left: '50%', transform: 'translateX(-50%)', width: 280, height: 160, background: `radial-gradient(ellipse, color-mix(in srgb,${AC} 22%,transparent), transparent 70%)`, pointerEvents: 'none' }} />
+
+            {/* Close */}
+            <button
+              onClick={dismissPopup}
+              style={{ position: 'absolute', top: 14, right: 14, width: 34, height: 34, borderRadius: '50%', background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.09)', color: 'rgba(244,242,248,.4)', cursor: 'pointer', fontSize: 20, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif', transition: 'all .15s' }}
+            >×</button>
+
+            {/* Icon */}
+            <div style={{ width: 68, height: 68, borderRadius: 22, background: `linear-gradient(135deg, color-mix(in srgb,${AC} 20%,transparent), color-mix(in srgb,${AC} 8%,transparent))`, border: `1px solid color-mix(in srgb,${AC} 35%,transparent)`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 22px', fontSize: 30, boxShadow: `0 0 30px color-mix(in srgb,${AC} 15%,transparent)` }}>
+              🎁
+            </div>
+
+            {/* Label */}
+            <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10.5, letterSpacing: '.18em', color: AC2, textTransform: 'uppercase', marginBottom: 12 }}>Oferta exclusiva</div>
+
+            {/* Headline */}
+            <h2 style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 900, fontSize: 30, lineHeight: 1.1, margin: '0 0 10px', letterSpacing: '-.02em', color: '#f4f2f8' }}>
+              <span style={{ color: AC }}>30% off</span> na sua<br />compra
+            </h2>
+            <p style={{ fontSize: 14.5, color: 'rgba(244,242,248,.45)', margin: '0 0 30px', lineHeight: 1.5 }}>
+              Copie o cupom e use no checkout.
+            </p>
+
+            {/* Coupon */}
+            <div
+              onClick={copyLuma30}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: `color-mix(in srgb,${AC} 7%,rgba(0,0,0,.4))`, border: `1.5px dashed color-mix(in srgb,${AC} 40%,transparent)`, borderRadius: 16, padding: '18px 22px', cursor: 'pointer', gap: 12, transition: 'background .15s', marginBottom: 16 }}
+              onMouseEnter={e => (e.currentTarget.style.background = `color-mix(in srgb,${AC} 12%,rgba(0,0,0,.4))`)}
+              onMouseLeave={e => (e.currentTarget.style.background = `color-mix(in srgb,${AC} 7%,rgba(0,0,0,.4))`)}
+            >
+              <span style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 900, fontSize: 32, letterSpacing: '.06em', color: '#f4f2f8' }}>LUMA30</span>
+              <span style={{ fontSize: 12, fontWeight: 700, padding: '8px 16px', borderRadius: 10, background: popupCopied ? 'rgba(52,211,153,.15)' : `color-mix(in srgb,${AC} 14%,transparent)`, color: popupCopied ? '#34d399' : AC2, border: `1px solid ${popupCopied ? 'rgba(52,211,153,.3)' : `color-mix(in srgb,${AC} 28%,transparent)`}`, transition: 'all .25s', fontFamily: "'Manrope',sans-serif", whiteSpace: 'nowrap', letterSpacing: '.04em' }}>
+                {popupCopied ? '✓ Copiado!' : '📋 Copiar'}
+              </span>
+            </div>
+
+            {/* CTA */}
+            <a
+              href="#planos"
+              onClick={dismissPopup}
+              style={{ display: 'block', background: `linear-gradient(135deg, ${AC}, color-mix(in srgb,${AC} 70%,#7c3aed))`, color: '#fff', fontWeight: 800, fontSize: 15, padding: '15px 20px', borderRadius: 14, textDecoration: 'none', fontFamily: "'Manrope',sans-serif", boxShadow: `0 8px 32px color-mix(in srgb,${AC} 30%,transparent)`, transition: 'opacity .15s' }}
+              onMouseEnter={e => (e.currentTarget.style.opacity = '.85')}
+              onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
+            >
+              Ver planos com desconto →
+            </a>
+
+            <p style={{ margin: '16px 0 0', fontSize: 11.5, color: 'rgba(244,242,248,.2)', fontFamily: "'JetBrains Mono',monospace", letterSpacing: '.05em' }}>Clique fora para fechar</p>
+          </div>
+        </div>
+      )}
 
     </div>
   )

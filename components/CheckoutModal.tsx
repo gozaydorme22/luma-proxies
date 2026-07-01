@@ -366,6 +366,16 @@ export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
                           {couponLoading ? '...' : 'Aplicar'}
                         </button>
                       </div>
+                      {!couponInput && !couponError && (
+                        <div
+                          onClick={() => { setCouponInput('LUMA30'); couponRef.current?.focus() }}
+                          style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'rgba(244,242,248,.4)', cursor: 'pointer', transition: 'color .15s' }}
+                          onMouseEnter={e => (e.currentTarget.style.color = 'rgba(244,242,248,.7)')}
+                          onMouseLeave={e => (e.currentTarget.style.color = 'rgba(244,242,248,.4)')}
+                        >
+                          🎁 <span>Tem um cupom? Use <b style={{ fontFamily: "'JetBrains Mono',monospace", color: '#c084fc' }}>LUMA30</b> para 30% off</span>
+                        </div>
+                      )}
                       {couponError && <div style={{ marginTop: 8, fontSize: 13, color: '#f87171' }}>{couponError}</div>}
                     </>
                   )}
