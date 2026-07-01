@@ -213,15 +213,28 @@ export default function ProxiesPage() {
             {chart.line && <path d={chart.line} fill="none" stroke={AC2} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="1400" style={{ animation: 'lumaDraw 1.4s ease both' }}/>}
             {hoverIdx !== null && (() => {
               const n    = activeData.length
-              const max  = Math.max(...activeData)
               const svgX = (hoverIdx / (n - 1)) * 720
-              const svgY = max > 0 ? 200 - 18 - (activeData[hoverIdx] / max) * (200 - 36) : 182
-              return <>
-                <line x1={svgX} y1="0" x2={svgX} y2="200" stroke="rgba(255,255,255,.18)" strokeWidth="1" strokeDasharray="4 3"/>
-                <circle cx={svgX} cy={svgY} r="4.5" fill={AC} stroke="#0a0612" strokeWidth="2.5"/>
-              </>
+              return <line x1={svgX} y1="0" x2={svgX} y2="200" stroke="rgba(255,255,255,.18)" strokeWidth="1" strokeDasharray="4 3"/>
             })()}
           </svg>
+
+          {hoverIdx !== null && (() => {
+            const n    = activeData.length
+            const max  = Math.max(...activeData)
+            const svgY = max > 0 ? 200 - 18 - (activeData[hoverIdx] / max) * (200 - 36) : 182
+            const dotTop  = (svgY / 200) * 190
+            const dotLeft = (hoverIdx / (n - 1)) * 100
+            return (
+              <div style={{
+                position: 'absolute', pointerEvents: 'none',
+                top: dotTop, left: `${dotLeft}%`,
+                transform: 'translate(-50%, -50%)',
+                width: 10, height: 10, borderRadius: '50%',
+                background: AC, border: '2.5px solid #0a0612',
+                boxShadow: `0 0 8px color-mix(in srgb,${AC} 70%,transparent)`,
+              }}/>
+            )
+          })()}
 
           {hoverIdx !== null && (() => {
             const n       = activeData.length
