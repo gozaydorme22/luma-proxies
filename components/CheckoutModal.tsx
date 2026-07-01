@@ -560,12 +560,15 @@ export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
                         placeholder="000.000.000-00"
                         style={{
                           background: 'rgba(255,255,255,.04)',
-                          border: `1px solid ${cpf && !cpfValid ? 'rgba(248,113,113,.4)' : 'rgba(255,255,255,.1)'}`,
+                          border: `1px solid ${cpf.replace(/\D/g,'').length === 11 && !cpfValid ? 'rgba(248,113,113,.4)' : 'rgba(255,255,255,.1)'}`,
                           borderRadius: 11, padding: '13px 16px', color: '#f4f2f8', fontSize: 14,
                           fontFamily: "'JetBrains Mono',monospace", letterSpacing: '.06em', outline: 'none',
                           transition: 'border-color .12s', width: '100%', boxSizing: 'border-box',
                         }}
                       />
+                      {cpf.replace(/\D/g,'').length === 11 && !cpfValid && (
+                        <div style={{ fontSize: 11, color: '#f87171', marginTop: 2 }}>CPF inválido — verifique os dígitos.</div>
+                      )}
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                       <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(244,242,248,.4)', fontFamily: "'JetBrains Mono',monospace" }}>Telefone</label>
@@ -621,11 +624,6 @@ export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
                       {intentPending && (
                         <div style={{ marginTop: 8, textAlign: 'center', fontSize: 12, color: 'rgba(244,242,248,.4)' }}>
                           Escolha entre recarregar ou criar uma nova proxy.
-                        </div>
-                      )}
-                      {!cpfValid && cpf.length > 0 && (
-                        <div style={{ marginTop: 8, textAlign: 'center', fontSize: 12, color: '#f87171' }}>
-                          Preencha um CPF válido para continuar.
                         </div>
                       )}
                     </>
