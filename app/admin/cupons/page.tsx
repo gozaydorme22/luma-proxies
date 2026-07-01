@@ -137,7 +137,7 @@ export default function CuponsPage() {
               <button
                 type="button"
                 onClick={() => setSingleUse(v => !v)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: singleUse ? '#34d399' : 'rgba(244,242,248,.3)', display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}
+                style={{ background: 'none', border: 'none', outline: 'none', cursor: 'pointer', padding: 0, color: singleUse ? '#34d399' : 'rgba(244,242,248,.3)', display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}
               >
                 {singleUse ? <ToggleRight size={22} /> : <ToggleLeft size={22} />}
                 <span style={{ fontSize: 12, fontFamily: "'JetBrains Mono',monospace" }}>{singleUse ? 'Sim' : 'Não'}</span>
@@ -209,7 +209,7 @@ export default function CuponsPage() {
                     }
                   }}
                   title={c.single_use_per_user ? 'Desativar uso único' : 'Ativar uso único'}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: c.single_use_per_user ? '#34d399' : 'rgba(244,242,248,.3)', padding: 4 }}
+                  style={{ background: 'none', border: 'none', outline: 'none', cursor: 'pointer', color: c.single_use_per_user ? '#34d399' : 'rgba(244,242,248,.3)', padding: 4 }}
                 >
                   {c.single_use_per_user ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
                 </button>
