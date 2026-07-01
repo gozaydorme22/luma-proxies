@@ -49,7 +49,10 @@ export default function ProxyDetailPage({ params }: { params: Promise<{ id: stri
 
   useEffect(() => {
     fetch(`/api/proxies/${id}`)
-      .then(r => r.ok ? r.json() : null)
+      .then(r => {
+        if (r.status === 401) { router.replace('/login'); return null }
+        return r.ok ? r.json() : null
+      })
       .then(d => { if (d) setProxy(d) })
       .finally(() => setLoading(false))
   }, [id])

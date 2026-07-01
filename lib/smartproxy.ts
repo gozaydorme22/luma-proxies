@@ -1,6 +1,7 @@
 // SmartProxy management API — authenticates via session login (not app_key)
 // CF bypass: ua-sec + Hash headers (confirmed working from server IPs)
 // Token lasts 7 days; re-login on cold start or expiry
+import { randomBytes } from 'crypto'
 
 export const GATEWAY_HOST = process.env.SMARTPROXY_GATEWAY_HOST ?? 'proxy.smartproxy.net'
 export const GATEWAY_PORT = Number(process.env.SMARTPROXY_GATEWAY_PORT ?? '3120')
@@ -131,7 +132,8 @@ export function mgmtUsername(username: string): string {
 
 export function makePassword(): string {
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+  const bytes = randomBytes(16)
   let out = ''
-  for (let i = 0; i < 16; i++) out += chars[Math.floor(Math.random() * chars.length)]
+  for (const b of bytes) out += chars[b % chars.length]
   return out
 }

@@ -49,7 +49,8 @@ export async function POST(req: NextRequest) {
 
   // Validate coupon server-side from DB
   let appliedCoupon: string | null = null
-  let amount = Number(product.price)
+  let discountPct   = 0
+  let amount        = Number(product.price)
 
   if (coupon) {
     const code = (coupon as string).trim().toUpperCase()
@@ -64,7 +65,8 @@ export async function POST(req: NextRequest) {
       const isExpired   = couponData.expires_at && new Date(couponData.expires_at) < new Date()
       const isExhausted = couponData.max_uses !== null && couponData.uses_count >= couponData.max_uses
       if (!isExpired && !isExhausted) {
-        amount = Math.round(Number(product.price) * (1 - Number(couponData.discount_pct)) * 100) / 100
+        discountPct = Number(couponData.discount_pct)
+        amount      = Math.round(Number(product.price) * (1 - discountPct) * 100) / 100
         appliedCoupon = code
       }
     }
@@ -88,7 +90,7 @@ export async function POST(req: NextRequest) {
   }
 
   const meta = Buffer.from(
-    JSON.stringify({ uid, gb, plan_label, total_brl: amount, coupon: appliedCoupon })
+    JSON.stringify({ uid, gb, plan_label, total_brl: amount, coupon: appliedCoupon, discount_pct: discountPct })
   ).toString('base64url')
 
   const hmac = createHmac('sha256', process.env.SYNCPAY_WEBHOOK_SECRET ?? '').update(meta).digest('base64url')

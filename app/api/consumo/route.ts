@@ -43,6 +43,7 @@ export async function GET() {
       .from('proxies')
       .select('id, label, proxy_type, gb_limit, used_gb, status')
       .eq('assigned_to', uid)
+      .neq('status', 'removed')
       .order('sold_at', { ascending: false }),
     supabase
       .from('usage_snapshots')

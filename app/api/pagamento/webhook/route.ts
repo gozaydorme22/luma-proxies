@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
   }
   if (!metaB64) return NextResponse.json({ error: 'Missing meta' }, { status: 400 })
 
-  interface Meta { uid: string; gb: number; plan_label: string; total_brl: number; coupon: string | null }
+  interface Meta { uid: string; gb: number; plan_label: string; total_brl: number; coupon: string | null; discount_pct?: number }
   let meta: Meta
   try {
     meta = JSON.parse(Buffer.from(metaB64, 'base64url').toString()) as Meta
@@ -250,8 +250,9 @@ export async function POST(req: NextRequest) {
     // Payment confirmation email
     if (client?.email) {
       const name       = client.name || client.email.split('@')[0]
+      const discountLabel = meta.discount_pct ? ` · −${Math.round(meta.discount_pct * 100)}%` : ''
       const couponLine = meta.coupon
-        ? `<tr><td style="color:rgba(244,242,248,.4);">Cupom</td><td style="color:#34d399;text-align:right;font-family:'Courier New',monospace;">${meta.coupon} · −10%</td></tr>`
+        ? `<tr><td style="color:rgba(244,242,248,.4);">Cupom</td><td style="color:#34d399;text-align:right;font-family:'Courier New',monospace;">${meta.coupon}${discountLabel}</td></tr>`
         : ''
 
       const { error: confErr } = await resend.emails.send({

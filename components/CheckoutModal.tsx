@@ -75,7 +75,7 @@ export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
   const [pixStatus, setPixStatus] = useState<'pending' | 'completed' | 'failed'>('pending')
   const [copied,    setCopied]    = useState(false)
 
-  const plan        = plans[idx] ?? FALLBACK_PLANS[1]
+  const plan        = plans[idx] ?? plans[0] ?? FALLBACK_PLANS[0]
   const discountAmt = couponApplied ? plan.price * couponDiscountPct : 0
   const total       = plan.price - discountAmt
   const loggedIn    = user !== undefined && user !== null
@@ -101,9 +101,9 @@ export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
             perGb: p.price / p.gb_limit,
           }))
         setPlans(mapped)
-        // Re-seleciona o idx correto caso o array tenha mudado de tamanho
+        // Re-seleciona o idx correto; se o plano inicial não existir, usa o primeiro disponível
         const newIdx = mapped.findIndex(p => p.gb === initialPlan)
-        if (newIdx >= 0) setIdx(newIdx)
+        setIdx(newIdx >= 0 ? newIdx : 0)
       })
       .catch(() => { /* mantém fallback */ })
   }, [initialPlan])
