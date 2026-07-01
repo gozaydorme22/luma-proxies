@@ -302,7 +302,7 @@ export async function POST(req: NextRequest) {
 
     void proxyId
 
-    // Increment coupon uses_count
+    // Increment coupon uses_count and record per-user use
     if (meta.coupon) {
       const { data: couponRow } = await supabase
         .from('coupons')
@@ -314,6 +314,10 @@ export async function POST(req: NextRequest) {
           .from('coupons')
           .update({ uses_count: couponRow.uses_count + 1 })
           .eq('id', couponRow.id)
+        // Record per-user usage (UNIQUE constraint prevents duplicates)
+        await supabase
+          .from('coupon_uses')
+          .insert({ coupon_id: couponRow.id, client_id: meta.uid })
       }
     }
   })

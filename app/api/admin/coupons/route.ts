@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
   if (adminOnly(req)) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
 
   const body = await req.json()
-  const { code, discount_pct, max_uses, expires_at } = body
+  const { code, discount_pct, max_uses, expires_at, single_use_per_user } = body
 
   if (!code || discount_pct === undefined || discount_pct === '') {
     return NextResponse.json({ error: 'Código e desconto são obrigatórios.' }, { status: 400 })
@@ -37,11 +37,12 @@ export async function POST(req: NextRequest) {
   const { data, error } = await supabase
     .from('coupons')
     .insert({
-      code:         code.trim().toUpperCase(),
-      discount_pct: pct,
-      max_uses:     max_uses ? Number(max_uses) : null,
-      expires_at:   expires_at || null,
-      active:       true,
+      code:                code.trim().toUpperCase(),
+      discount_pct:        pct,
+      max_uses:            max_uses ? Number(max_uses) : null,
+      expires_at:          expires_at || null,
+      active:              true,
+      single_use_per_user: single_use_per_user === true,
     })
     .select()
     .single()

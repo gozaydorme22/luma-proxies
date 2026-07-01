@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
   const supabase = createServerClient()
   const { data: coupon } = await supabase
     .from('coupons')
-    .select('id, code, discount_pct, max_uses, uses_count, active, expires_at')
+    .select('id, code, discount_pct, max_uses, uses_count, active, expires_at, single_use_per_user')
     .eq('code', code)
     .eq('active', true)
     .single()
@@ -25,6 +25,20 @@ export async function GET(req: NextRequest) {
   }
   if (coupon.max_uses !== null && coupon.uses_count >= coupon.max_uses) {
     return NextResponse.json({ valid: false, error: 'Cupom esgotado.' })
+  }
+
+  // Per-user single-use check
+  if (coupon.single_use_per_user) {
+    const { data: alreadyUsed } = await supabase
+      .from('coupon_uses')
+      .select('id')
+      .eq('coupon_id', coupon.id)
+      .eq('client_id', uid)
+      .maybeSingle()
+
+    if (alreadyUsed) {
+      return NextResponse.json({ valid: false, error: 'Você já utilizou este cupom.' })
+    }
   }
 
   return NextResponse.json({ valid: true, discount_pct: Number(coupon.discount_pct), code: coupon.code })

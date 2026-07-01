@@ -14,6 +14,7 @@ interface Coupon {
   uses_count: number
   active: boolean
   expires_at: string | null
+  single_use_per_user: boolean
   created_at: string
 }
 
@@ -30,10 +31,11 @@ export default function CuponsPage() {
   const [saving,  setSaving]  = useState(false)
   const [error,   setError]   = useState<string | null>(null)
 
-  const [code,       setCode]       = useState('')
-  const [discountPct,setDiscountPct]= useState('')
-  const [maxUses,    setMaxUses]    = useState('')
-  const [expiresAt,  setExpiresAt]  = useState('')
+  const [code,            setCode]           = useState('')
+  const [discountPct,     setDiscountPct]    = useState('')
+  const [maxUses,         setMaxUses]        = useState('')
+  const [expiresAt,       setExpiresAt]      = useState('')
+  const [singleUse,       setSingleUse]      = useState(false)
 
   useEffect(() => {
     fetch('/api/admin/coupons')
@@ -52,12 +54,12 @@ export default function CuponsPage() {
       const res = await fetch('/api/admin/coupons', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, discount_pct: pct, max_uses: maxUses || null, expires_at: expiresAt || null }),
+        body: JSON.stringify({ code, discount_pct: pct, max_uses: maxUses || null, expires_at: expiresAt || null, single_use_per_user: singleUse }),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error ?? 'Erro ao criar cupom.'); return }
       setCoupons(prev => [data, ...prev])
-      setCode(''); setDiscountPct(''); setMaxUses(''); setExpiresAt('')
+      setCode(''); setDiscountPct(''); setMaxUses(''); setExpiresAt(''); setSingleUse(false)
     } catch {
       setError('Erro de rede.')
     } finally {
@@ -99,7 +101,7 @@ export default function CuponsPage() {
           <div style={{ marginBottom: 16, fontFamily: "'Archivo',sans-serif", fontWeight: 700, fontSize: 15, color: '#f4f2f8', display: 'flex', alignItems: 'center', gap: 8 }}>
             <Plus size={16} color={AC} /> Novo cupom
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
             <div>
               <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.1em', color: 'rgba(244,242,248,.4)', textTransform: 'uppercase', marginBottom: 6, fontFamily: "'JetBrains Mono',monospace" }}>Código</div>
               <input
@@ -130,6 +132,17 @@ export default function CuponsPage() {
                 onChange={e => setExpiresAt(e.target.value ? new Date(e.target.value).toISOString() : '')}
               />
             </div>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.1em', color: 'rgba(244,242,248,.4)', textTransform: 'uppercase', marginBottom: 6, fontFamily: "'JetBrains Mono',monospace" }}>Uso único por usuário</div>
+              <button
+                type="button"
+                onClick={() => setSingleUse(v => !v)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: singleUse ? '#34d399' : 'rgba(244,242,248,.3)', display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}
+              >
+                {singleUse ? <ToggleRight size={22} /> : <ToggleLeft size={22} />}
+                <span style={{ fontSize: 12, fontFamily: "'JetBrains Mono',monospace" }}>{singleUse ? 'Sim' : 'Não'}</span>
+              </button>
+            </div>
           </div>
           {error && <div style={{ marginBottom: 10, fontSize: 13, color: '#f87171' }}>{error}</div>}
           <button
@@ -144,8 +157,8 @@ export default function CuponsPage() {
         {/* COUPONS LIST */}
         <Card padded={false}>
           {/* header */}
-          <div style={{ display: 'grid', gridTemplateColumns: '140px 80px 120px 80px 130px 80px', gap: 8, padding: '8px 20px', borderBottom: '1px solid rgba(255,255,255,.06)' }}>
-            {['Código', 'Desconto', 'Usos', 'Máx.', 'Expira', ''].map((h, i) => (
+          <div style={{ display: 'grid', gridTemplateColumns: '140px 80px 120px 80px 130px 110px 80px', gap: 8, padding: '8px 20px', borderBottom: '1px solid rgba(255,255,255,.06)' }}>
+            {['Código', 'Desconto', 'Usos', 'Máx.', 'Expira', 'Uso único/user', ''].map((h, i) => (
               <div key={i} style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.06em', color: 'rgba(244,242,248,.3)' }}>{h}</div>
             ))}
           </div>
@@ -157,7 +170,7 @@ export default function CuponsPage() {
           ) : coupons.map((c, idx) => (
             <div
               key={c.id}
-              style={{ display: 'grid', gridTemplateColumns: '140px 80px 120px 80px 130px 80px', gap: 8, alignItems: 'center', padding: '13px 20px', borderBottom: idx < coupons.length - 1 ? '1px solid rgba(255,255,255,.06)' : 'none' }}
+              style={{ display: 'grid', gridTemplateColumns: '140px 80px 120px 80px 130px 110px 80px', gap: 8, alignItems: 'center', padding: '13px 20px', borderBottom: idx < coupons.length - 1 ? '1px solid rgba(255,255,255,.06)' : 'none' }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontFamily: "'JetBrains Mono',monospace", fontWeight: 700, fontSize: 13, color: c.active ? AC2 : 'rgba(244,242,248,.3)' }}>{c.code}</span>
@@ -181,6 +194,25 @@ export default function CuponsPage() {
               </div>
               <div style={{ fontSize: 12, color: 'rgba(244,242,248,.5)' }}>
                 {c.expires_at ? fmtDate(c.expires_at) : 'Nunca'}
+              </div>
+              <div>
+                <button
+                  onClick={async () => {
+                    const res = await fetch(`/api/admin/coupons/${c.id}`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ single_use_per_user: !c.single_use_per_user }),
+                    })
+                    if (res.ok) {
+                      const updated = await res.json()
+                      setCoupons(prev => prev.map(x => x.id === c.id ? updated : x))
+                    }
+                  }}
+                  title={c.single_use_per_user ? 'Desativar uso único' : 'Ativar uso único'}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: c.single_use_per_user ? '#34d399' : 'rgba(244,242,248,.3)', padding: 4 }}
+                >
+                  {c.single_use_per_user ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
+                </button>
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
                 <button
