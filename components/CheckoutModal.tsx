@@ -69,6 +69,10 @@ export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
   const [loading, setLoading]   = useState(false)
   const [payError, setPayError] = useState<string | null>(null)
 
+  type ActiveProxy = { usedGb: number; totalGb: number; label: string }
+  const [activeProxy, setActiveProxy]       = useState<ActiveProxy | null | undefined>(undefined)
+  const [purchaseIntent, setPurchaseIntent] = useState<'recharge' | 'new' | null>(null)
+
   // PIX state
   const [pixCode,   setPixCode]   = useState('')
   const [pixId,     setPixId]     = useState('')
@@ -107,6 +111,25 @@ export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
       })
       .catch(() => { /* mantém fallback */ })
   }, [initialPlan])
+
+  // Detect if user has an active proxy — determines recharge vs new proxy flow
+  useEffect(() => {
+    if (!user) return
+    fetch('/api/proxies')
+      .then(r => r.json())
+      .then(d => {
+        const proxy = (d.proxies ?? []).find((p: { status: string }) => p.status === 'ativa')
+        if (!proxy) {
+          setActiveProxy(null)
+          setPurchaseIntent('new')
+        } else {
+          setActiveProxy({ usedGb: proxy.usedGb, totalGb: proxy.totalGb, label: proxy.name })
+          if (proxy.usedGb >= proxy.totalGb) setPurchaseIntent('recharge') // expired → auto-recharge
+          // else: user must choose
+        }
+      })
+      .catch(() => { setActiveProxy(null); setPurchaseIntent('new') })
+  }, [user])
 
   // No auto-coupon — user types the code manually
 
@@ -175,10 +198,11 @@ export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          gb:       Number(plan.gb),
+          gb:          Number(plan.gb),
           cpf,
-          whatsapp: whatsapp.trim() || null,
-          coupon:   couponApplied,
+          whatsapp:    whatsapp.trim() || null,
+          coupon:      couponApplied,
+          is_recharge: purchaseIntent === 'recharge',
         }),
       })
 
@@ -303,6 +327,54 @@ export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
                     </Link>
                   </div>
                 </div>
+              )}
+
+              {/* Intent chooser — shown when user has active proxy with remaining GB */}
+              {loggedIn && activeProxy !== undefined && activeProxy !== null && (
+                <>
+                  {purchaseIntent === null ? (
+                    <div>
+                      <div style={LABEL}>O que você quer fazer?</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {[
+                          { key: 'recharge' as const, title: 'Recarregar proxy atual', sub: `Adiciona GB na "${activeProxy.label}" — mesmas credenciais` },
+                          { key: 'new'      as const, title: 'Nova proxy',             sub: 'Novas credenciais separadas (para outro projeto)' },
+                        ].map(opt => (
+                          <button
+                            key={opt.key}
+                            onClick={() => setPurchaseIntent(opt.key)}
+                            style={{
+                              background: 'rgba(255,255,255,.03)',
+                              border: '1px solid rgba(255,255,255,.1)',
+                              borderRadius: 12, padding: '14px 16px', cursor: 'pointer',
+                              textAlign: 'left', transition: 'all .12s',
+                            }}
+                            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = `color-mix(in srgb,${AC} 50%,transparent)`; (e.currentTarget as HTMLButtonElement).style.background = `color-mix(in srgb,${AC} 7%,transparent)` }}
+                            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,255,255,.1)'; (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,.03)' }}
+                          >
+                            <div style={{ fontWeight: 700, fontSize: 14, color: '#f4f2f8' }}>{opt.title}</div>
+                            <div style={{ fontSize: 12, color: 'rgba(244,242,248,.45)', marginTop: 4 }}>{opt.sub}</div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : activeProxy.usedGb >= activeProxy.totalGb ? (
+                    /* Proxy expirada — sempre recarga, sem escolha */
+                    <div style={{ background: `color-mix(in srgb,${AC} 7%,transparent)`, border: `1px solid color-mix(in srgb,${AC} 25%,transparent)`, borderRadius: 12, padding: '12px 16px', fontSize: 13.5, color: 'rgba(244,242,248,.75)' }}>
+                      <b style={{ color: AC2 }}>GB esgotado.</b> Sua proxy atual será recarregada com os novos GB.
+                    </div>
+                  ) : (
+                    /* Mostrar escolha feita + link para alterar */
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,.03)', border: '1px solid rgba(255,255,255,.08)', borderRadius: 12, padding: '11px 16px' }}>
+                      <span style={{ fontSize: 13.5, color: 'rgba(244,242,248,.7)', fontWeight: 600 }}>
+                        {purchaseIntent === 'recharge' ? '⚡ Recarregar proxy atual' : '➕ Nova proxy'}
+                      </span>
+                      <button onClick={() => setPurchaseIntent(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: AC2, fontSize: 12.5, fontWeight: 600, padding: 0 }}>
+                        Alterar
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
 
               {/* Plan selector */}
@@ -504,29 +576,42 @@ export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
             {/* Continuar CTA */}
             {loggedIn && (
               <div style={{ padding: '14px 24px 20px', borderTop: '1px solid rgba(255,255,255,.06)', flexShrink: 0 }}>
-                <button
-                  onClick={() => { if (cpfValid) setStep('summary') }}
-                  disabled={!cpfValid}
-                  style={{
-                    width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
-                    background: cpfValid ? AC : 'rgba(255,255,255,.06)',
-                    color: cpfValid ? '#ffffff' : 'rgba(244,242,248,.25)',
-                    fontWeight: 800, fontSize: 15,
-                    padding: '15px 0', border: 'none', borderRadius: 13,
-                    cursor: cpfValid ? 'pointer' : 'not-allowed',
-                    boxShadow: cpfValid ? `0 10px 32px color-mix(in srgb,${AC} 44%,transparent)` : 'none',
-                    fontFamily: "'Manrope',sans-serif",
-                    transition: 'all .15s',
-                  }}
-                >
-                  Continuar
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-                </button>
-                {!cpfValid && cpf.length > 0 && (
-                  <div style={{ marginTop: 8, textAlign: 'center', fontSize: 12, color: '#f87171' }}>
-                    Preencha um CPF válido para continuar.
-                  </div>
-                )}
+                {(() => {
+                  const intentPending = loggedIn && activeProxy !== undefined && activeProxy !== null && purchaseIntent === null
+                  const canGo = cpfValid && !intentPending
+                  return (
+                    <>
+                      <button
+                        onClick={() => { if (canGo) setStep('summary') }}
+                        disabled={!canGo}
+                        style={{
+                          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
+                          background: canGo ? AC : 'rgba(255,255,255,.06)',
+                          color: canGo ? '#ffffff' : 'rgba(244,242,248,.25)',
+                          fontWeight: 800, fontSize: 15,
+                          padding: '15px 0', border: 'none', borderRadius: 13,
+                          cursor: canGo ? 'pointer' : 'not-allowed',
+                          boxShadow: canGo ? `0 10px 32px color-mix(in srgb,${AC} 44%,transparent)` : 'none',
+                          fontFamily: "'Manrope',sans-serif",
+                          transition: 'all .15s',
+                        }}
+                      >
+                        Continuar
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                      </button>
+                      {intentPending && (
+                        <div style={{ marginTop: 8, textAlign: 'center', fontSize: 12, color: 'rgba(244,242,248,.4)' }}>
+                          Escolha entre recarregar ou criar uma nova proxy.
+                        </div>
+                      )}
+                      {!cpfValid && cpf.length > 0 && (
+                        <div style={{ marginTop: 8, textAlign: 'center', fontSize: 12, color: '#f87171' }}>
+                          Preencha um CPF válido para continuar.
+                        </div>
+                      )}
+                    </>
+                  )
+                })()}
               </div>
             )}
           </>

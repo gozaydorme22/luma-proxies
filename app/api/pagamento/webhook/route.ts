@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
   }
   if (!metaB64) return NextResponse.json({ error: 'Missing meta' }, { status: 400 })
 
-  interface Meta { uid: string; gb: number; plan_label: string; total_brl: number; coupon: string | null; discount_pct?: number; nonce?: string }
+  interface Meta { uid: string; gb: number; plan_label: string; total_brl: number; coupon: string | null; discount_pct?: number; nonce?: string; is_recharge?: boolean }
   let meta: Meta
   try {
     meta = JSON.parse(Buffer.from(metaB64, 'base64url').toString()) as Meta
@@ -115,45 +115,7 @@ export async function POST(req: NextRequest) {
     let emailGbLimit: number = Number(meta.gb)
 
     if (smartproxyEnabled) {
-      const baseUser = makeUsername(meta.uid)
-      proxyUser  = connectionUsername(baseUser)  // smart-xxx_area-BR (underscore+area format)
-      proxyPass  = makePassword()
-      proxyHost  = GATEWAY_HOST
-      proxyPort  = GATEWAY_PORT
-      proxyLabel = `${meta.plan_label} Residencial BR`
-
-      let isRecharge    = false
-      let newGbLimit    = meta.gb
-      let alreadyUsedGb = 0
-
-      try {
-        console.log('[webhook] creating sub-account:', baseUser)
-        await createSubAccount(baseUser, proxyPass, meta.gb)
-        console.log('[webhook] sub-account created:', proxyUser)
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err)
-        console.warn('[webhook] createSubAccount failed (recharge?):', msg)
-        isRecharge = true
-        try {
-          const mgmtUser = mgmtUsername(proxyUser)
-          const subAccounts = await listSubAccounts()
-          const existing = subAccounts.find(u => u.username === mgmtUser)
-          // Add purchased GB to the existing cap (not to usage ceiling)
-          // e.g. 5GB cap + 10GB purchase = 15GB new cap, regardless of how much was used
-          const existingLimitGb = existing ? kbToGb(existing.limit_flow ?? 0) : 0
-          alreadyUsedGb = existing ? kbToGb(existing.usage_flow ?? 0) : 0
-          const newLimit = existingLimitGb + meta.gb
-          newGbLimit = newLimit
-          await updateSubAccount(mgmtUser, { status: 1, limitGb: newLimit })
-          console.log('[webhook] recharge updated, new limit:', newLimit, '(was:', existingLimitGb, '+ new:', meta.gb, ')')
-        } catch (e2) {
-          console.error('[webhook] SmartProxy provision failed:', e2)
-          sendAdminAlert()
-          return
-        }
-      }
-
-      // Look up existing proxy by uid (not username) — username format may have changed across deploys
+      // Look up existing proxy first — determines username generation for new vs recharge
       const { data: existingProxy } = await supabase
         .from('proxies')
         .select('id, gb_limit, password, username')
@@ -161,14 +123,72 @@ export async function POST(req: NextRequest) {
         .eq('status', 'sold')
         .maybeSingle()
 
-      // Sync username to the current canonical format
-      if (existingProxy && existingProxy.username !== proxyUser) {
-        await supabase.from('proxies').update({ username: proxyUser }).eq('id', existingProxy.id)
-        console.log('[webhook] username migrated:', existingProxy.username, '→', proxyUser)
+      // When creating a new proxy while user already has one, derive username from the
+      // payment nonce (UUID) so it doesn't collide with the existing sub-account on SmartProxy
+      const baseUser = (!meta.is_recharge && existingProxy && meta.nonce)
+        ? `luma${meta.nonce.replace(/-/g, '').slice(0, 8).toLowerCase()}`
+        : makeUsername(meta.uid)
+
+      proxyUser  = connectionUsername(baseUser)
+      proxyPass  = makePassword()
+      proxyHost  = GATEWAY_HOST
+      proxyPort  = GATEWAY_PORT
+      proxyLabel = `${meta.plan_label} Residencial BR`
+
+      let isRecharge = false
+      let newGbLimit = meta.gb
+
+      if (meta.is_recharge) {
+        // Explicit recharge — add GB to existing sub-account on SmartProxy
+        isRecharge = true
+        const spMgmtUser = existingProxy?.username
+          ? mgmtUsername(existingProxy.username)
+          : `smart-${makeUsername(meta.uid)}`
+        try {
+          const subAccounts = await listSubAccounts()
+          const existing = subAccounts.find(u => u.username === spMgmtUser)
+          const existingLimitGb = existing ? kbToGb(existing.limit_flow ?? 0) : 0
+          const newLimit = existingLimitGb + meta.gb
+          newGbLimit = newLimit
+          await updateSubAccount(spMgmtUser, { status: 1, limitGb: newLimit })
+          console.log('[webhook] explicit recharge, new limit:', newLimit, '(was:', existingLimitGb, '+ new:', meta.gb, ')')
+        } catch (e2) {
+          console.error('[webhook] SmartProxy recharge failed:', e2)
+          sendAdminAlert()
+          return
+        }
+      } else {
+        // New proxy — create sub-account on SmartProxy
+        try {
+          console.log('[webhook] creating sub-account:', baseUser)
+          await createSubAccount(baseUser, proxyPass, meta.gb)
+          console.log('[webhook] sub-account created:', proxyUser)
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err)
+          console.warn('[webhook] createSubAccount failed, falling back to recharge:', msg)
+          isRecharge = true
+          const spMgmtUser = existingProxy?.username
+            ? mgmtUsername(existingProxy.username)
+            : `smart-${makeUsername(meta.uid)}`
+          try {
+            const subAccounts = await listSubAccounts()
+            const existing = subAccounts.find(u => u.username === spMgmtUser)
+            const existingLimitGb = existing ? kbToGb(existing.limit_flow ?? 0) : 0
+            const newLimit = existingLimitGb + meta.gb
+            newGbLimit = newLimit
+            await updateSubAccount(spMgmtUser, { status: 1, limitGb: newLimit })
+            console.log('[webhook] fallback recharge, new limit:', newLimit)
+          } catch (e2) {
+            console.error('[webhook] SmartProxy provision failed:', e2)
+            sendAdminAlert()
+            return
+          }
+        }
       }
 
       if (isRecharge && existingProxy?.password) {
-        proxyPass = existingProxy.password
+        proxyPass  = existingProxy.password   // keep same credentials
+        proxyUser  = existingProxy.username   // keep same username
         proxyLabel = `${newGbLimit} GB Residencial BR`
       } else if (!isRecharge) {
         newGbLimit = meta.gb
@@ -188,7 +208,8 @@ export async function POST(req: NextRequest) {
         sold_at:     new Date().toISOString(),
       }
 
-      const { data: written, error: writeErr } = existingProxy
+      // Recharge updates existing row; new proxy always inserts (even if user has another)
+      const { data: written, error: writeErr } = (isRecharge && existingProxy)
         ? await supabase.from('proxies').update(proxyRow).eq('id', existingProxy.id).select('id').single()
         : await supabase.from('proxies').insert(proxyRow).select('id').single()
 

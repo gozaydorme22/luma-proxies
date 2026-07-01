@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
   const uid  = hdrs.get('x-uid')
   if (!uid) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { gb, cpf, whatsapp, coupon } = await req.json()
+  const { gb, cpf, whatsapp, coupon, is_recharge } = await req.json()
 
   if (!gb || !cpf) {
     return NextResponse.json({ error: 'Campos obrigatórios ausentes.' }, { status: 400 })
@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
   }
 
   const meta = Buffer.from(
-    JSON.stringify({ uid, gb, plan_label, total_brl: amount, coupon: appliedCoupon, discount_pct: discountPct, nonce: crypto.randomUUID() })
+    JSON.stringify({ uid, gb, plan_label, total_brl: amount, coupon: appliedCoupon, discount_pct: discountPct, nonce: crypto.randomUUID(), is_recharge: !!is_recharge })
   ).toString('base64url')
 
   const hmac = createHmac('sha256', process.env.SYNCPAY_WEBHOOK_SECRET ?? '').update(meta).digest('base64url')
