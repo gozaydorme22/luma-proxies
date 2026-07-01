@@ -440,9 +440,7 @@ export default function LandingPage() {
                 <span className="trust-sep" style={{ opacity: .3 }}>·</span>
                 <span>↻ ROTAÇÃO AUTO</span>
                 <span className="trust-sep" style={{ opacity: .3 }}>·</span>
-                <span>$ PIX</span>
-                <span className="trust-sep" style={{ opacity: .3 }}>·</span>
-                <span>₿ CRYPTO</span>
+                <span style={{ whiteSpace: 'nowrap' }}>$ PIX · ₿ CRYPTO</span>
               </div>
               <div style={{ marginTop: 13, paddingTop: 13, borderTop: '1px solid rgba(255,255,255,.06)', fontFamily: "'JetBrains Mono',monospace", fontSize: 11, letterSpacing: '.1em', color: 'rgba(244,242,248,.55)' }}>
                 <span style={{ color: '#34d399' }}>●</span> 99.98% UPTIME
