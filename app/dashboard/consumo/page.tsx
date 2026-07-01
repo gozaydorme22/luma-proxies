@@ -8,8 +8,10 @@ const AC2 = 'color-mix(in srgb,#a855f7 45%,#ffffff)'
 interface ProxyUsage { id: string; name: string; totalGb: number; usedGb: number; status: string }
 
 function fmtGb(gb: number) {
-  if (gb < 1) return (gb * 1024).toFixed(0) + ' MB'
-  return gb.toFixed(gb % 1 === 0 ? 0 : 2).replace('.', ',') + ' GB'
+  if (gb >= 1) return gb.toFixed(gb % 1 === 0 ? 0 : 2).replace('.', ',') + ' GB'
+  const mb = gb * 1024
+  if (mb >= 0.1) return mb.toFixed(mb >= 10 ? 0 : 1) + ' MB'
+  return (mb * 1024).toFixed(0) + ' KB'
 }
 
 function buildChart(data: number[], W: number, H: number, pad: number) {
