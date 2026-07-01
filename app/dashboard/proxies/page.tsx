@@ -50,12 +50,13 @@ function buildChart(data: number[], W: number, H: number, pad: number) {
 }
 
 const typeMap: Record<string, [string, string, string]> = {
-  residencial:      [`color-mix(in srgb,${AC} 22%,transparent)`, '#fff', 'RESIDENCIAL'],
-  residencial_fixo: [`color-mix(in srgb,${AC} 22%,transparent)`, '#fff', 'RESIDENCIAL'],
-  mobile:           ['rgba(52,211,153,.16)', '#34d399', 'MOBILE'],
-  cpa:              ['rgba(255,255,255,.07)', 'rgba(244,242,248,.7)', 'CPA'],
-  ipv4:             ['rgba(255,255,255,.07)', 'rgba(244,242,248,.7)', 'IPV4'],
-  datacenter:       ['rgba(255,255,255,.07)', 'rgba(244,242,248,.7)', 'DC'],
+  residencial:          [`color-mix(in srgb,${AC} 22%,transparent)`, '#fff', 'RESIDENCIAL'],
+  residencial_fixo:     [`color-mix(in srgb,${AC} 22%,transparent)`, '#fff', 'RESIDENCIAL'],
+  residential_rotating: [`color-mix(in srgb,${AC} 22%,transparent)`, '#fff', 'RESIDENCIAL'],
+  mobile:               ['rgba(52,211,153,.16)', '#34d399', 'MOBILE'],
+  cpa:                  ['rgba(255,255,255,.07)', 'rgba(244,242,248,.7)', 'CPA'],
+  ipv4:                 ['rgba(255,255,255,.07)', 'rgba(244,242,248,.7)', 'IPV4'],
+  datacenter:           ['rgba(255,255,255,.07)', 'rgba(244,242,248,.7)', 'DC'],
 }
 
 const chipBase: React.CSSProperties = {
@@ -80,7 +81,6 @@ export default function ProxiesPage() {
   const [usage24h, setUsage24h]     = useState<number[]>(new Array(24).fill(0))
   const [range,    setRange]        = useState<Range>('14d')
   const [totalRemGb, setTotalRemGb] = useState(0)
-  const [tier, setTier]             = useState('Bronze')
   const [loading, setLoading]       = useState(true)
   const [syncing,   setSyncing]     = useState(false)
   const [removing,  setRemoving]   = useState<string | null>(null)
@@ -89,6 +89,9 @@ export default function ProxiesPage() {
   const [filter, setFilter]         = useState<'all' | 'ativa' | 'inativa'>('all')
   const [hoverIdx, setHoverIdx]     = useState<number | null>(null)
 
+  // Reset tooltip when range changes to avoid out-of-bounds index
+  useEffect(() => { setHoverIdx(null) }, [range])
+
   async function loadProxies() {
     const d = await fetch('/api/proxies').then(r => r.json()).catch(() => ({}))
     setProxies(d.proxies ?? [])
@@ -96,7 +99,6 @@ export default function ProxiesPage() {
     setUsage7d(d.usage7d   ?? new Array(7).fill(0))
     setUsage24h(d.usage24h ?? new Array(24).fill(0))
     setTotalRemGb(d.totalRemainingGb ?? 0)
-    setTier(capitalize(d.client?.tier ?? 'bronze'))
   }
 
   async function removeProxy(id: string) {
@@ -137,14 +139,21 @@ export default function ProxiesPage() {
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite'
 
+  const ativas   = proxies.filter(p => p.status === 'ativa').length
+  const inativas = proxies.filter(p => p.status !== 'ativa').length
+
   const visible = proxies
-    .filter(p => filter === 'all' || p.status === filter)
+    .filter(p => {
+      if (filter === 'all') return true
+      if (filter === 'ativa') return p.status === 'ativa'
+      if (filter === 'inativa') return p.status === 'inativa' || p.status === 'suspensa'
+      return true
+    })
     .filter(p => !search || p.name.toLowerCase().includes(search.toLowerCase()) || (p.proxyUser ?? '').toLowerCase().includes(search.toLowerCase()))
 
   const activeData = range === '24h' ? usage24h : range === '7d' ? usage7d : usage14d
   const chart      = buildChart(activeData, 720, 200, 18)
   const sumGb      = activeData.reduce((a, b) => a + b, 0)
-  const ativas     = proxies.filter(p => p.status === 'ativa').length
 
   const rangeLabel: Record<Range, string> = {
     '24h': 'últimas 24 horas',
@@ -168,7 +177,7 @@ export default function ProxiesPage() {
       <div className="dash-stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginTop: 26 }}>
         <StatCard loading={loading} label="Proxys"     value={String(proxies.length)} icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={AC2} strokeWidth="2"><rect x="3" y="4" width="18" height="6" rx="1"/><rect x="3" y="14" width="18" height="6" rx="1"/></svg>} />
         <StatCard loading={loading} label="Ativas"      value={String(ativas)} valueColor="#34d399" icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2"><path d="M5 13a10 10 0 0 1 14 0M8.5 16.5a5 5 0 0 1 7 0M12 20h.01"/></svg>} />
-        <StatCard loading={loading} label="Inativas"    value={String(proxies.length - ativas)} valueColor="#f87171" icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>} />
+        <StatCard loading={loading} label="Inativas"    value={String(inativas)} valueColor="#f87171" icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>} />
         <StatCard loading={loading} label="Saldo total" value={fmtGb(totalRemGb)} icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={AC2} strokeWidth="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/></svg>} />
       </div>
 
@@ -208,8 +217,8 @@ export default function ProxiesPage() {
             <line x1="0" y1="50"  x2="720" y2="50"  stroke="rgba(255,255,255,.05)" strokeWidth="1"/>
             <line x1="0" y1="100" x2="720" y2="100" stroke="rgba(255,255,255,.05)" strokeWidth="1"/>
             <line x1="0" y1="150" x2="720" y2="150" stroke="rgba(255,255,255,.05)" strokeWidth="1"/>
-            {chart.area && <path d={chart.area} fill="url(#lumaArea)"/>}
-            {chart.line && <path d={chart.line} fill="none" stroke={AC2} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="1400" style={{ animation: 'lumaDraw 1.4s ease both' }}/>}
+            {chart.area && <path key={`area-${range}`} d={chart.area} fill="url(#lumaArea)"/>}
+            {chart.line && <path key={`line-${range}`} d={chart.line} fill="none" stroke={AC2} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="1400" style={{ animation: 'lumaDraw 1.4s ease both' }}/>}
             {hoverIdx !== null && (() => {
               const n    = activeData.length
               const svgX = (hoverIdx / (n - 1)) * 720
@@ -431,8 +440,6 @@ export default function ProxiesPage() {
     </div>
   )
 }
-
-function capitalize(s: string) { return s.charAt(0).toUpperCase() + s.slice(1) }
 
 function StatCard({ label, icon, value, valueColor, highlight, loading }: { label: string; icon: React.ReactNode; value: string; valueColor?: string; highlight?: boolean; loading?: boolean }) {
   return (
