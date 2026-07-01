@@ -7,7 +7,7 @@ import { Card } from '@/components/ui/Card'
 import { Badge, statusVariant } from '@/components/ui/Badge'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
-import { Search } from 'lucide-react'
+import { Search, Trash2 } from 'lucide-react'
 
 interface Order {
   id: string
@@ -45,15 +45,15 @@ const STATUS_OPTS = [
 ]
 
 export default function AdminPedidosPage() {
-  const [orders, setOrders]       = useState<Order[]>([])
-  const [loading, setLoading]     = useState(true)
-  const [search, setSearch]       = useState('')
-  const [filterS, setFilterS]     = useState('')
-  const [cancelling, setCancelling]   = useState<string | null>(null)
-  const [deleting, setDeleting]       = useState<string | null>(null)
-  const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [orders, setOrders]     = useState<Order[]>([])
+  const [loading, setLoading]   = useState(true)
+  const [search, setSearch]     = useState('')
+  const [filterS, setFilterS]   = useState('')
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [deleting, setDeleting] = useState(false)
 
   function loadOrders() {
+    setLoading(true)
     fetch('/api/admin/orders')
       .then(r => r.json())
       .then(d => setOrders(Array.isArray(d) ? d : []))
@@ -63,46 +63,6 @@ export default function AdminPedidosPage() {
 
   useEffect(() => { loadOrders() }, [])
 
-  async function handleDelete(id: string) {
-    if (!confirm('Excluir este pedido permanentemente?')) return
-    setDeleting(id)
-    try {
-      await fetch(`/api/admin/orders/${id}`, { method: 'DELETE' })
-      loadOrders()
-    } finally {
-      setDeleting(null)
-    }
-  }
-
-  async function handleBulkDelete(status: string) {
-    if (!confirm(`Excluir TODOS os pedidos? Esta ação não pode ser desfeita.`)) return
-    setBulkDeleting(true)
-    try {
-      const res  = await fetch(`/api/admin/orders?status=${status}`, { method: 'DELETE' })
-      const data = await res.json()
-      alert(`${data.deleted} pedido(s) excluído(s).`)
-      loadOrders()
-    } finally {
-      setBulkDeleting(false)
-    }
-  }
-
-  async function handleCancel(id: string) {
-    if (!confirm('Cancelar este pedido? A proxy será devolvida ao estoque.')) return
-    setCancelling(id)
-    try {
-      const res = await fetch(`/api/admin/orders/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'cancelado' }),
-      })
-      if (res.ok) loadOrders()
-      else { const d = await res.json(); alert(d.error ?? 'Erro ao cancelar.') }
-    } finally {
-      setCancelling(null)
-    }
-  }
-
   const filtered = orders.filter(o => {
     const q = search.toLowerCase()
     if (q && !o.clientName.toLowerCase().includes(q) && !o.clientEmail.toLowerCase().includes(q) && !o.id.toLowerCase().includes(q)) return false
@@ -110,35 +70,75 @@ export default function AdminPedidosPage() {
     return true
   })
 
+  const allSelected  = filtered.length > 0 && filtered.every(o => selected.has(o.id))
+  const someSelected = filtered.some(o => selected.has(o.id))
+
+  function toggleAll() {
+    if (allSelected) {
+      setSelected(s => { const n = new Set(s); filtered.forEach(o => n.delete(o.id)); return n })
+    } else {
+      setSelected(s => { const n = new Set(s); filtered.forEach(o => n.add(o.id)); return n })
+    }
+  }
+
+  function toggleOne(id: string) {
+    setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+
+  async function deleteSelected() {
+    const ids = filtered.filter(o => selected.has(o.id)).map(o => o.id)
+    if (!ids.length) return
+    if (!confirm(`Excluir ${ids.length} pedido(s) selecionado(s)? Esta ação não pode ser desfeita.`)) return
+    setDeleting(true)
+    try {
+      await Promise.all(ids.map(id => fetch(`/api/admin/orders/${id}`, { method: 'DELETE' })))
+      setSelected(new Set())
+      loadOrders()
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const nSelected = [...selected].filter(id => filtered.some(o => o.id === id)).length
+
   return (
     <DashboardShell isAdmin userName="Admin">
       <TopBar
         title="Pedidos"
         sub={loading ? 'Carregando...' : `${orders.length} pedidos no total`}
-        actions={
-          <button
-            onClick={() => handleBulkDelete('')}
-            disabled={bulkDeleting}
-            className="text-xs font-bold px-4 py-2 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-40 cursor-pointer"
-          >
-            {bulkDeleting ? 'Excluindo...' : 'Excluir todos os pedidos'}
-          </button>
-        }
       />
       <div className="p-6 flex flex-col gap-4">
-        <div className="flex gap-3">
+
+        <div className="flex gap-3 items-center">
           <div className="flex-1">
             <Input
               placeholder="Buscar por cliente, e-mail ou ID..."
               value={search}
-              onChange={e => setSearch(e.target.value)}
+              onChange={e => { setSearch(e.target.value); setSelected(new Set()) }}
               left={<Search size={14} />}
             />
           </div>
           <div className="w-44">
-            <Select options={STATUS_OPTS} value={filterS} onChange={e => setFilterS(e.target.value)} />
+            <Select options={STATUS_OPTS} value={filterS} onChange={e => { setFilterS(e.target.value); setSelected(new Set()) }} />
           </div>
         </div>
+
+        {/* BARRA DE SELEÇÃO */}
+        {nSelected > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(168,85,247,.1)', border: '1px solid rgba(168,85,247,.25)', borderRadius: 12, padding: '10px 16px' }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'color-mix(in srgb,#a855f7 45%,#ffffff)' }}>
+              {nSelected} pedido{nSelected > 1 ? 's' : ''} selecionado{nSelected > 1 ? 's' : ''}
+            </span>
+            <button
+              onClick={deleteSelected}
+              disabled={deleting}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, padding: '7px 16px', borderRadius: 8, border: '1px solid rgba(248,113,113,.4)', background: 'rgba(248,113,113,.1)', color: '#f87171', cursor: deleting ? 'not-allowed' : 'pointer', opacity: deleting ? .6 : 1 }}
+            >
+              <Trash2 size={14} />
+              {deleting ? 'Excluindo...' : `Excluir ${nSelected}`}
+            </button>
+          </div>
+        )}
 
         <Card padded={false}>
           {loading ? (
@@ -147,50 +147,56 @@ export default function AdminPedidosPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-(--border)">
-                  {['ID', 'Cliente', 'Produto', 'Total', 'Data', 'Status', ''].map(h => (
+                  <th className="px-4 py-3 w-10">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      ref={el => { if (el) el.indeterminate = someSelected && !allSelected }}
+                      onChange={toggleAll}
+                      style={{ width: 15, height: 15, cursor: 'pointer', accentColor: '#a855f7' }}
+                    />
+                  </th>
+                  {['ID', 'Cliente', 'Produto', 'Total', 'Data', 'Status'].map(h => (
                     <th key={h} className="text-left text-xs font-medium text-(--text-faint) px-4 py-3">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
-                  <tr><td colSpan={6} className="text-center text-(--text-faint) py-10">Nenhum pedido encontrado.</td></tr>
-                ) : filtered.map(o => (
-                  <tr key={o.id} className="border-b border-(--border) last:border-0 hover:bg-white/2 transition-colors">
-                    <td className="px-4 py-3 font-mono text-xs text-(--text-faint)">{o.id.slice(0, 8)}</td>
-                    <td className="px-4 py-3">
-                      <p className="text-sm text-(--text)">{o.clientName}</p>
-                      <p className="text-xs text-(--text-faint)">{o.clientEmail}</p>
-                    </td>
-                    <td className="px-4 py-3 text-(--text-muted)">Proxy Residencial Rotativa · {o.quantity}GB</td>
-                    <td className="px-4 py-3 font-semibold text-(--text)">{fmtBRL(o.totalBrl)}</td>
-                    <td className="px-4 py-3 text-(--text-faint) text-xs">{fmtDate(o.createdAt)}</td>
-                    <td className="px-4 py-3">
-                      <Badge variant={statusVariant(o.status)} dot>{statusLabel(o.status)}</Badge>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-2 items-center">
-                        {o.status !== 'cancelado' && o.status !== 'reembolsado' && (
-                          <button
-                            onClick={() => handleCancel(o.id)}
-                            disabled={cancelling === o.id}
-                            className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-(--red)/30 text-(--red) hover:bg-(--red)/10 transition-colors disabled:opacity-40 cursor-pointer"
-                          >
-                            {cancelling === o.id ? '...' : 'Cancelar'}
-                          </button>
-                        )}
-                        <button
-                          onClick={() => handleDelete(o.id)}
-                          disabled={deleting === o.id}
-                          className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-red-800/40 text-red-600 hover:bg-red-900/20 transition-colors disabled:opacity-40 cursor-pointer"
-                          title="Excluir permanentemente"
-                        >
-                          {deleting === o.id ? '...' : '🗑'}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                  <tr><td colSpan={7} className="text-center text-(--text-faint) py-10">Nenhum pedido encontrado.</td></tr>
+                ) : filtered.map(o => {
+                  const isSelected = selected.has(o.id)
+                  return (
+                    <tr
+                      key={o.id}
+                      onClick={() => toggleOne(o.id)}
+                      className="border-b border-(--border) last:border-0 transition-colors cursor-pointer"
+                      style={{ background: isSelected ? 'rgba(168,85,247,.06)' : undefined }}
+                      onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'rgba(255,255,255,.02)' }}
+                      onMouseLeave={e => { e.currentTarget.style.background = isSelected ? 'rgba(168,85,247,.06)' : 'transparent' }}
+                    >
+                      <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleOne(o.id)}
+                          style={{ width: 15, height: 15, cursor: 'pointer', accentColor: '#a855f7' }}
+                        />
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs text-(--text-faint)">{o.id.slice(0, 8)}</td>
+                      <td className="px-4 py-3">
+                        <p className="text-sm text-(--text)">{o.clientName}</p>
+                        <p className="text-xs text-(--text-faint)">{o.clientEmail}</p>
+                      </td>
+                      <td className="px-4 py-3 text-(--text-muted)">Proxy Residencial · {o.quantity}GB</td>
+                      <td className="px-4 py-3 font-semibold text-(--text)">{fmtBRL(o.totalBrl)}</td>
+                      <td className="px-4 py-3 text-(--text-faint) text-xs">{fmtDate(o.createdAt)}</td>
+                      <td className="px-4 py-3">
+                        <Badge variant={statusVariant(o.status)} dot>{statusLabel(o.status)}</Badge>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           )}
