@@ -150,11 +150,19 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      // Look up existing proxy by uid (not username) — username format may have changed across deploys
       const { data: existingProxy } = await supabase
         .from('proxies')
-        .select('id, gb_limit, password')
-        .eq('username', proxyUser)
+        .select('id, gb_limit, password, username')
+        .eq('assigned_to', meta.uid)
+        .eq('status', 'sold')
         .maybeSingle()
+
+      // Sync username to the current canonical format
+      if (existingProxy && existingProxy.username !== proxyUser) {
+        await supabase.from('proxies').update({ username: proxyUser }).eq('id', existingProxy.id)
+        console.log('[webhook] username migrated:', existingProxy.username, '→', proxyUser)
+      }
 
       if (isRecharge && existingProxy?.password) {
         proxyPass = existingProxy.password
