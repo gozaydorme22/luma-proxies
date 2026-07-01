@@ -29,12 +29,24 @@ function fmtGb(gb: number) {
 function buildChart(data: number[], W: number, H: number, pad: number) {
   if (data.every(v => v === 0)) return { line: '', area: '' }
   const max = Math.max(...data)
-  const n = data.length
-  const xs = (i: number) => (i / (n - 1)) * W
-  const ys = (v: number) => H - pad - (v / max) * (H - pad * 2)
-  let line = ''
-  data.forEach((v, i) => { line += (i === 0 ? 'M' : 'L') + xs(i).toFixed(1) + ' ' + ys(v).toFixed(1) + ' ' })
-  return { line: line.trim(), area: line + `L ${W} ${H} L 0 ${H} Z` }
+  const n   = data.length
+  const pts = data.map((v, i) => ({
+    x: (i / (n - 1)) * W,
+    y: H - pad - (v / max) * (H - pad * 2),
+  }))
+  let line = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`
+  for (let i = 0; i < n - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)]
+    const p1 = pts[i]
+    const p2 = pts[i + 1]
+    const p3 = pts[Math.min(n - 1, i + 2)]
+    const cp1x = (p1.x + (p2.x - p0.x) / 6).toFixed(1)
+    const cp1y = (p1.y + (p2.y - p0.y) / 6).toFixed(1)
+    const cp2x = (p2.x - (p3.x - p1.x) / 6).toFixed(1)
+    const cp2y = (p2.y - (p3.y - p1.y) / 6).toFixed(1)
+    line += ` C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`
+  }
+  return { line, area: line + ` L ${W} ${H} L 0 ${H} Z` }
 }
 
 const typeMap: Record<string, [string, string, string]> = {
@@ -188,7 +200,7 @@ export default function ProxiesPage() {
             <line x1="0" y1="100" x2="720" y2="100" stroke="rgba(255,255,255,.05)" strokeWidth="1"/>
             <line x1="0" y1="150" x2="720" y2="150" stroke="rgba(255,255,255,.05)" strokeWidth="1"/>
             {chart.area && <path d={chart.area} fill="url(#lumaArea)"/>}
-            {chart.line && <path d={chart.line} fill="none" stroke={AC2} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="1400" style={{ animation: 'lumaDraw 1.4s ease both' }}/>}
+            {chart.line && <path d={chart.line} fill="none" stroke={AC2} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="1400" style={{ animation: 'lumaDraw 1.4s ease both' }}/>}
           </svg>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontFamily: "'JetBrains Mono',monospace", fontSize: 9.5, color: 'rgba(244,242,248,.35)' }}>
             {xLabels[range].map(l => <span key={l}>{l}</span>)}
