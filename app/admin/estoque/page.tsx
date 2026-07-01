@@ -22,6 +22,12 @@ interface Proxy {
   clients?: { email: string; name: string | null } | null
 }
 
+interface ActiveProxy {
+  id: string; label: string; host: string; port: number; username: string; password: string
+  used_gb: number; gb_limit: number; sold_at: string | null
+  clients?: { email: string; name: string | null } | null
+}
+
 const TYPE_LABELS: Record<string, string> = {
   residential_rotating: 'Residencial Rotativo',
   residential_sticky:   'Residencial Fixo',
@@ -45,6 +51,13 @@ export default function EstoquePage() {
   const [loadingProxies, setLoadingPx]    = useState<Record<string, boolean>>({})
   const [revealed, setRevealed]           = useState<Record<string, boolean>>({})
   const [checkResults, setCheckResults]   = useState<Record<string, 'checking' | 'ok' | 'fail'>>({})
+
+  // Tabs
+  const [tab, setTab]           = useState<'produtos' | 'ativas'>('produtos')
+  const [ativas, setAtivas]     = useState<ActiveProxy[]>([])
+  const [loadingAt, setLoadingAt] = useState(false)
+  const [syncing, setSyncing]   = useState(false)
+  const [syncMsg, setSyncMsg]   = useState('')
 
   // Modal: criar produto
   const [prodModal, setProdModal] = useState(false)
@@ -119,6 +132,33 @@ export default function EstoquePage() {
   }
 
   useEffect(() => { if (user) loadProducts() }, [user])
+
+  async function loadAtivas() {
+    setLoadingAt(true)
+    const token = await getToken()
+    const res   = await fetch('/api/admin/proxies?status=sold', { headers: { Authorization: `Bearer ${token}` } })
+    const data  = await res.json()
+    setAtivas(Array.isArray(data) ? data : [])
+    setLoadingAt(false)
+  }
+
+  useEffect(() => { if (user && tab === 'ativas') loadAtivas() }, [user, tab])
+
+  async function handleSync() {
+    setSyncing(true); setSyncMsg('')
+    const token = await getToken()
+    const res   = await fetch('/api/admin/proxies/sync', { method: 'POST', headers: { Authorization: `Bearer ${token}` } })
+    const data  = await res.json()
+    setSyncing(false)
+    if (data.synced) {
+      setSyncMsg(`✓ ${data.updated} proxie(s) atualizadas`)
+      loadAtivas()
+      loadProducts()
+    } else {
+      setSyncMsg('Erro ao sincronizar com SmartProxy')
+    }
+    setTimeout(() => setSyncMsg(''), 4000)
+  }
 
   async function handleCreateProduct() {
     setProdSaving(true); setProdErr('')
@@ -251,14 +291,42 @@ export default function EstoquePage() {
         title="Estoque"
         sub="Gerencie produtos e proxies por categoria"
         actions={
-          <button onClick={() => { setProdModal(true); setProdErr('') }} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: AC, color: '#0a0612', fontWeight: 800, fontSize: 14, padding: '11px 20px', borderRadius: 12, border: 'none', cursor: 'pointer' }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14"/></svg>
-            Novo Produto
-          </button>
+          tab === 'produtos' ? (
+            <button onClick={() => { setProdModal(true); setProdErr('') }} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: AC, color: '#0a0612', fontWeight: 800, fontSize: 14, padding: '11px 20px', borderRadius: 12, border: 'none', cursor: 'pointer' }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14"/></svg>
+              Novo Produto
+            </button>
+          ) : (
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: syncing ? 'rgba(168,85,247,.3)' : AC, color: '#0a0612', fontWeight: 800, fontSize: 14, padding: '11px 20px', borderRadius: 12, border: 'none', cursor: syncing ? 'not-allowed' : 'pointer', opacity: syncing ? .7 : 1 }}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ animation: syncing ? 'lumaSpin 1s linear infinite' : 'none' }}><path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c1.66 0 3-4.03 3-9s-1.34-9-3-9m0 18c-1.66 0-3-4.03-3-9s1.34-9 3-9m-9 9a9 9 0 0 1 9-9"/></svg>
+              {syncing ? 'Sincronizando...' : 'Sync SmartProxy'}
+            </button>
+          )
         }
       />
       <div style={{ padding: 32, fontFamily: "'Manrope',sans-serif", color: '#f4f2f8' }}>
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+
+        {/* TABS */}
+        <div style={{ display: 'flex', gap: 4, marginBottom: 24, background: 'rgba(255,255,255,.04)', borderRadius: 12, padding: 4, width: 'fit-content' }}>
+          {(['produtos', 'ativas'] as const).map(t => (
+            <button key={t} onClick={() => setTab(t)} style={{ fontSize: 13, fontWeight: 700, padding: '8px 18px', borderRadius: 9, border: 'none', background: tab === t ? AC : 'transparent', color: tab === t ? '#0a0612' : 'rgba(244,242,248,.5)', cursor: 'pointer', fontFamily: "'Manrope',sans-serif", transition: 'all .15s', textTransform: 'capitalize' }}>
+              {t === 'produtos' ? 'Produtos' : 'Proxies Ativas'}
+            </button>
+          ))}
+        </div>
+
+        {syncMsg && (
+          <div style={{ marginBottom: 16, padding: '10px 16px', borderRadius: 10, background: syncMsg.startsWith('✓') ? 'rgba(52,211,153,.1)' : 'rgba(248,113,113,.1)', border: `1px solid ${syncMsg.startsWith('✓') ? 'rgba(52,211,153,.3)' : 'rgba(248,113,113,.3)'}`, color: syncMsg.startsWith('✓') ? '#34d399' : '#f87171', fontSize: 13 }}>
+            {syncMsg}
+          </div>
+        )}
+
+        {tab === 'produtos' && (<>
 
         {/* STATS */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 28 }}>
@@ -417,6 +485,53 @@ export default function EstoquePage() {
             })}
           </div>
         )}
+
+        </>)}
+
+        {/* PROXIES ATIVAS */}
+        {tab === 'ativas' && (
+          <div>
+            {loadingAt ? (
+              <div style={{ textAlign: 'center', padding: '60px 0', color: 'rgba(244,242,248,.3)' }}>Carregando...</div>
+            ) : ativas.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px 0', border: '1px dashed rgba(255,255,255,.08)', borderRadius: 16, color: 'rgba(244,242,248,.3)', fontSize: 14 }}>
+                Nenhuma proxy ativa no momento.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {ativas.map(px => {
+                  const pct      = px.gb_limit > 0 ? Math.min(100, Math.round((Number(px.used_gb) / px.gb_limit) * 100)) : 0
+                  const barColor = pct >= 90 ? '#f87171' : pct >= 70 ? '#fbbf24' : '#34d399'
+                  return (
+                    <div key={px.id} style={{ background: 'rgba(255,255,255,.02)', border: '1px solid rgba(255,255,255,.07)', borderRadius: 14, padding: '16px 20px', display: 'grid', gridTemplateColumns: '1fr 280px', gap: 20, alignItems: 'center' }}>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                          <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#34d399', boxShadow: '0 0 5px #34d399', display: 'inline-block' }} />
+                          <span style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 800, fontSize: 15, color: '#f4f2f8' }}>{px.label}</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: 16, fontSize: 11.5, color: 'rgba(244,242,248,.4)' }}>
+                          {px.clients && <span style={{ color: AC2, fontWeight: 600 }}>{px.clients.email}</span>}
+                          <span style={{ fontFamily: "'JetBrains Mono',monospace" }}>{px.host}:{px.port}</span>
+                          {px.sold_at && <span>vendida em {new Date(px.sold_at).toLocaleDateString('pt-BR')}</span>}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'rgba(244,242,248,.4)', marginBottom: 5 }}>
+                          <span>Uso de dados</span>
+                          <span style={{ fontWeight: 700, color: barColor }}>{Number(px.used_gb).toFixed(4)} / {px.gb_limit} GB · {pct}%</span>
+                        </div>
+                        <div style={{ height: 6, borderRadius: 4, background: 'rgba(255,255,255,.07)' }}>
+                          <div style={{ height: '100%', width: `${pct}%`, borderRadius: 4, background: barColor }} />
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
       </div>
 
       {/* MODAL: NOVO PRODUTO */}

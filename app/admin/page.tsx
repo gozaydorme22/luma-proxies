@@ -6,7 +6,7 @@ import { TopBar } from '@/components/layout/TopBar'
 import { StatCard } from '@/components/ui/StatCard'
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge, statusVariant } from '@/components/ui/Badge'
-import { Package, ShoppingCart, Users, DollarSign } from 'lucide-react'
+import { ShoppingCart, Users, DollarSign } from 'lucide-react'
 
 interface Order {
   id: string
@@ -16,10 +16,7 @@ interface Order {
   totalBrl: number
   status: string
   createdAt: string
-}
-
-interface Product {
-  available_units: number
+  paidAt?: string
 }
 
 function fmtBRL(n: number) {
@@ -47,20 +44,22 @@ function monthStart() {
 }
 
 export default function AdminPage() {
-  const [orders, setOrders]       = useState<Order[]>([])
-  const [clients, setClients]     = useState<number>(0)
-  const [products, setProducts]   = useState<Product[]>([])
-  const [loading, setLoading]     = useState(true)
+  const [orders, setOrders]           = useState<Order[]>([])
+  const [activeClients, setActiveClients] = useState(0)
+  const [loading, setLoading]         = useState(true)
 
   useEffect(() => {
     Promise.all([
       fetch('/api/admin/orders').then(r => r.json()),
-      fetch('/api/admin/clients').then(r => r.json()),
-      fetch('/api/admin/products').then(r => r.json()),
-    ]).then(([ord, cli, prod]) => {
+      fetch('/api/admin/proxies?status=sold').then(r => r.json()),
+    ]).then(([ord, proxies]) => {
       setOrders(Array.isArray(ord) ? ord : [])
-      setClients(Array.isArray(cli) ? cli.length : 0)
-      setProducts(Array.isArray(prod) ? prod : [])
+      const uniqueClients = new Set(
+        (Array.isArray(proxies) ? proxies : [])
+          .map((p: any) => p.assigned_to)
+          .filter(Boolean)
+      )
+      setActiveClients(uniqueClients.size)
     }).catch(() => {}).finally(() => setLoading(false))
   }, [])
 
@@ -68,30 +67,30 @@ export default function AdminPage() {
   const monthBegin = monthStart()
 
   const pedidosHoje = orders.filter(o => o.createdAt >= today).length
-  const receitaMes  = orders.filter(o => o.status === 'pago' && (o as any).paidAt >= monthBegin).reduce((s, o) => s + o.totalBrl, 0)
-  const estoque     = products.reduce((s: number, p: Product) => s + (p.available_units ?? 0), 0)
-  const recentes    = orders.slice(0, 5)
+  const receitaMes  = orders
+    .filter(o => o.status === 'pago' && (o.paidAt ?? o.createdAt) >= monthBegin)
+    .reduce((s, o) => s + o.totalBrl, 0)
+  const recentes = orders.slice(0, 8)
 
   return (
     <DashboardShell isAdmin userName="Admin" userEmail="admin@lumaproxies.com">
       <TopBar title="Painel Admin" sub="Visão geral do negócio" />
       <div className="p-6 flex flex-col gap-6">
 
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           <StatCard
-            label="Proxys em estoque" value={loading ? '—' : String(estoque)}
-            icon={<Package size={16} />}
-          />
-          <StatCard
-            label="Pedidos hoje" value={loading ? '—' : String(pedidosHoje)}
+            label="Pedidos hoje"
+            value={loading ? '—' : String(pedidosHoje)}
             icon={<ShoppingCart size={16} />}
           />
           <StatCard
-            label="Clientes ativos" value={loading ? '—' : String(clients)}
+            label="Clientes com proxy ativa"
+            value={loading ? '—' : String(activeClients)}
             icon={<Users size={16} />}
           />
           <StatCard
-            label="Receita mês" value={loading ? '—' : fmtBRL(receitaMes)}
+            label="Receita do mês"
+            value={loading ? '—' : fmtBRL(receitaMes)}
             icon={<DollarSign size={16} />}
           />
         </div>
@@ -112,7 +111,7 @@ export default function AdminPage() {
                     <span className="text-xs font-mono text-(--text-faint) w-16 truncate">{o.id.slice(0, 8)}</span>
                     <div>
                       <p className="text-sm font-medium text-(--text)">{o.clientName}</p>
-                      <p className="text-xs text-(--text-faint)">Proxy Residencial · {o.quantity}GB</p>
+                      <p className="text-xs text-(--text-faint)">{o.clientEmail}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-4">

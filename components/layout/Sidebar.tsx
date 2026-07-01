@@ -17,7 +17,6 @@ const NAV_ITEMS = [
 
 const ADMIN_ITEMS = [
   { label: 'Painel',    href: '/admin',          icon: LayoutGrid },
-  { label: 'Estoque',   href: '/admin/estoque',  icon: Globe },
   { label: 'Pedidos',   href: '/admin/pedidos',  icon: ShoppingCart },
   { label: 'Clientes',  href: '/admin/clientes', icon: Settings },
   { label: 'Cupons',    href: '/admin/cupons',   icon: Tag },
