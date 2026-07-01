@@ -86,7 +86,10 @@ export default function ProxiesPage() {
   async function syncUsage() {
     setSyncing(true)
     try {
-      await fetch('/api/proxies/refresh', { method: 'POST' })
+      await fetch('/api/proxies/refresh', {
+        method: 'POST',
+        signal: AbortSignal.timeout(12000),
+      })
       await loadProxies()
     } catch { /* ignore */ } finally {
       setSyncing(false)
@@ -98,7 +101,7 @@ export default function ProxiesPage() {
       .catch(() => null)
       .finally(() => setLoading(false))
     // Sync usage from SmartProxy in the background on page load
-    fetch('/api/proxies/refresh', { method: 'POST' })
+    fetch('/api/proxies/refresh', { method: 'POST', signal: AbortSignal.timeout(12000) })
       .then(() => loadProxies())
       .catch(() => null)
   }, [])

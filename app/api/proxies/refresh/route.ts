@@ -26,7 +26,13 @@ export async function POST() {
   }
 
   try {
-    const subAccounts = await listSubAccounts()
+    const subAccounts = await Promise.race([
+      listSubAccounts(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('SmartProxy timeout')), 8000)
+      ),
+    ])
+
     const usageMap = new Map<string, number>(
       subAccounts.map(u => [u.username, kbToGb(u.usage_flow ?? 0)])
     )
@@ -47,7 +53,7 @@ export async function POST() {
 
     return NextResponse.json({ synced: true, updated })
   } catch (err) {
-    console.error('[proxies/refresh]', err)
+    console.error('[proxies/refresh]', err instanceof Error ? err.message : err)
     return NextResponse.json({ synced: false, reason: 'smartproxy_error' })
   }
 }
