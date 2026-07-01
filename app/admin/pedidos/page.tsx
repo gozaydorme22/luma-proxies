@@ -75,8 +75,7 @@ export default function AdminPedidosPage() {
   }
 
   async function handleBulkDelete(status: string) {
-    const label = status === 'pago' ? 'pagos' : status
-    if (!confirm(`Excluir TODOS os pedidos ${label}? Esta ação não pode ser desfeita.`)) return
+    if (!confirm(`Excluir TODOS os pedidos? Esta ação não pode ser desfeita.`)) return
     setBulkDeleting(true)
     try {
       const res  = await fetch(`/api/admin/orders?status=${status}`, { method: 'DELETE' })
@@ -118,11 +117,11 @@ export default function AdminPedidosPage() {
         sub={loading ? 'Carregando...' : `${orders.length} pedidos no total`}
         actions={
           <button
-            onClick={() => handleBulkDelete('pago')}
+            onClick={() => handleBulkDelete('')}
             disabled={bulkDeleting}
             className="text-xs font-bold px-4 py-2 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-40 cursor-pointer"
           >
-            {bulkDeleting ? 'Excluindo...' : 'Excluir todos os pagos'}
+            {bulkDeleting ? 'Excluindo...' : 'Excluir todos os pedidos'}
           </button>
         }
       />
