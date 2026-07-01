@@ -70,7 +70,8 @@ export default function ProxiesPage() {
   const [totalRemGb, setTotalRemGb] = useState(0)
   const [tier, setTier]             = useState('Bronze')
   const [loading, setLoading]       = useState(true)
-  const [syncing, setSyncing]       = useState(false)
+  const [syncing,   setSyncing]     = useState(false)
+  const [removing,  setRemoving]   = useState<string | null>(null)
   const [revealed, setRevealed]     = useState<Record<string, boolean>>({})
   const [search, setSearch]         = useState('')
   const [filter, setFilter]         = useState<'all' | 'ativa' | 'inativa'>('all')
@@ -83,6 +84,17 @@ export default function ProxiesPage() {
     setUsage24h(d.usage24h ?? new Array(24).fill(0))
     setTotalRemGb(d.totalRemainingGb ?? 0)
     setTier(capitalize(d.client?.tier ?? 'bronze'))
+  }
+
+  async function removeProxy(id: string) {
+    if (!confirm('Remover esta proxy do seu painel? Esta ação não pode ser desfeita.')) return
+    setRemoving(id)
+    try {
+      const res = await fetch(`/api/proxies/${id}`, { method: 'DELETE' })
+      if (res.ok) setProxies(prev => prev.filter(p => p.id !== id))
+    } catch { /* ignore */ } finally {
+      setRemoving(null)
+    }
   }
 
   async function syncUsage() {
@@ -321,10 +333,21 @@ export default function ProxiesPage() {
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: syncing ? 'lumaSpin 1s linear infinite' : 'none' }}><path d="M21 12a9 9 0 1 1-2.6-6.3M21 4v5h-5"/></svg>
                   </button>
-                  <Link href="?checkout=1" style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.12)', color: '#f4f2f8', fontWeight: 700, fontSize: 13, padding: 11, borderRadius: 10, textDecoration: 'none' }}>
-                    Recarregar
-                  </Link>
-                  <Link href={`/dashboard/proxies/${p.id}`} style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: AC, color: '#0a0612', fontWeight: 800, fontSize: 13, padding: 11, borderRadius: 10, textDecoration: 'none' }}>
+                  {p.status === 'suspensa' ? (
+                    <button
+                      onClick={() => removeProxy(p.id)}
+                      disabled={removing === p.id}
+                      style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, background: 'rgba(248,113,113,.1)', border: '1px solid rgba(248,113,113,.25)', color: '#f87171', fontWeight: 700, fontSize: 13, padding: 11, borderRadius: 10, cursor: removing === p.id ? 'not-allowed' : 'pointer', opacity: removing === p.id ? .5 : 1 }}
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                      Remover
+                    </button>
+                  ) : (
+                    <Link href="?checkout=1" style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.12)', color: '#f4f2f8', fontWeight: 700, fontSize: 13, padding: 11, borderRadius: 10, textDecoration: 'none' }}>
+                      Recarregar
+                    </Link>
+                  )}
+                  <Link href={`/dashboard/proxies/${p.id}`} style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: p.status === 'suspensa' ? 'rgba(255,255,255,.05)' : AC, color: p.status === 'suspensa' ? '#f4f2f8' : '#0a0612', fontWeight: 800, fontSize: 13, padding: 11, borderRadius: 10, textDecoration: 'none' }}>
                     Gerenciar <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
                   </Link>
                 </div>

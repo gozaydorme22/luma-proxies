@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { headers } from 'next/headers'
 import { createServerClient } from '@/lib/supabase/server'
 
-// User releases an inactive proxy back to available stock
+// User removes a suspended proxy from their dashboard
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const hdrs = await headers()
   const uid  = hdrs.get('x-uid')
@@ -11,19 +11,21 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const { id } = await params
   const supabase = createServerClient()
 
-  // Verify ownership before releasing
   const { data: proxy } = await supabase
     .from('proxies')
-    .select('id,assigned_to')
+    .select('id, status, assigned_to')
     .eq('id', id)
     .eq('assigned_to', uid)
     .single()
 
-  if (!proxy) return NextResponse.json({ error: 'não encontrada' }, { status: 404 })
+  if (!proxy) return NextResponse.json({ error: 'Proxy não encontrada.' }, { status: 404 })
+  if (proxy.status !== 'suspended') {
+    return NextResponse.json({ error: 'Só é possível remover proxies suspensas.' }, { status: 400 })
+  }
 
   const { error } = await supabase
     .from('proxies')
-    .update({ status: 'available', assigned_to: null, sold_at: null })
+    .update({ status: 'removed' })
     .eq('id', id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

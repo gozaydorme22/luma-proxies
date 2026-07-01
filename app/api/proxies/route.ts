@@ -48,6 +48,7 @@ export async function GET() {
       .from('proxies')
       .select('id,label,proxy_type,country,host,port,username,password,gb_limit,used_gb,status,sold_at,created_at')
       .eq('assigned_to', uid)
+      .neq('status', 'removed')
       .order('sold_at', { ascending: false }),
     supabase
       .from('usage_snapshots')
