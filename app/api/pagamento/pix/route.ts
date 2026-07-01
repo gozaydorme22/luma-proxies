@@ -112,6 +112,10 @@ export async function POST(req: NextRequest) {
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Erro ao gerar PIX.'
     console.error('[pix]', msg)
-    return NextResponse.json({ error: 'Erro ao gerar o PIX. Verifique seus dados e tente novamente.' }, { status: 502 })
+    const isCpfError = msg.toLowerCase().includes('cpf') || msg.includes('500')
+    const userMsg = isCpfError
+      ? 'Não foi possível gerar o PIX com esse CPF. Tente com outro CPF ou entre em contato com o suporte.'
+      : 'Erro ao gerar o PIX. Tente novamente em alguns instantes.'
+    return NextResponse.json({ error: userMsg }, { status: 502 })
   }
 }
