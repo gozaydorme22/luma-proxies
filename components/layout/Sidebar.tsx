@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils/cn'
 import {
   LayoutGrid, Globe, Zap, ShoppingCart, Clock,
-  Settings, LogOut, ChevronRight, Tag,
+  Settings, LogOut, ChevronRight, Tag, Package,
 } from 'lucide-react'
 
 const NAV_ITEMS = [
@@ -16,10 +16,11 @@ const NAV_ITEMS = [
 ]
 
 const ADMIN_ITEMS = [
-  { label: 'Painel',    href: '/admin',          icon: LayoutGrid },
-  { label: 'Pedidos',   href: '/admin/pedidos',  icon: ShoppingCart },
-  { label: 'Clientes',  href: '/admin/clientes', icon: Settings },
-  { label: 'Cupons',    href: '/admin/cupons',   icon: Tag },
+  { label: 'Painel',    href: '/admin',           icon: LayoutGrid },
+  { label: 'Pedidos',   href: '/admin/pedidos',   icon: ShoppingCart },
+  { label: 'Clientes',  href: '/admin/clientes',  icon: Settings },
+  { label: 'Produtos',  href: '/admin/produtos',  icon: Package },
+  { label: 'Cupons',    href: '/admin/cupons',    icon: Tag },
 ]
 
 interface SidebarProps {

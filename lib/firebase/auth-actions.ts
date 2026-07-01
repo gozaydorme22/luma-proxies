@@ -50,12 +50,8 @@ export async function signUp(email: string, password: string, name: string) {
     const cred = await createUserWithEmailAndPassword(auth, email, password)
     await updateProfile(cred.user, { displayName: name })
 
-    const token = await cred.user.getIdToken()
-    await fetch('/api/auth/session', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ token }),
-    })
+    // Não criamos sessão aqui — a sessão só é criada após a verificação do e-mail
+    // em /verificar/page.tsx. Assim o usuário não fica logado antes de verificar.
 
     const vRes = await fetch('/api/auth/send-verification', {
       method: 'POST',

@@ -313,6 +313,33 @@ export default function LandingPage() {
 
   const showCouponBanner = user === null || couponEligible === true
 
+  type Plan = { gb: string; price: string; perGb: string; highlight: boolean; badge: string | null }
+  const DEFAULT_PLANS: Plan[] = [
+    { gb: '3',  price: 'R$ 24,90',  perGb: 'R$ 8,30/GB',  highlight: false, badge: null },
+    { gb: '5',  price: 'R$ 41,90',  perGb: 'R$ 8,38/GB',  highlight: true,  badge: 'MAIS VENDIDO' },
+    { gb: '10', price: 'R$ 79,90',  perGb: 'R$ 7,99/GB',  highlight: false, badge: null },
+    { gb: '20', price: 'R$ 157,90', perGb: 'R$ 7,90/GB',  highlight: false, badge: 'MELHOR PREÇO' },
+  ]
+  const [plans, setPlans] = useState<Plan[]>(DEFAULT_PLANS)
+
+  useEffect(() => {
+    fetch('/api/products')
+      .then(r => r.json())
+      .then((data: Array<{ gb_limit: number; price: number }>) => {
+        if (!Array.isArray(data) || !data.length) return
+        const mapped: Plan[] = data.map(p => {
+          const gb        = String(p.gb_limit)
+          const price     = p.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+          const perGb     = (p.price / p.gb_limit).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) + '/GB'
+          const highlight = p.gb_limit === 5
+          const badge     = p.gb_limit === 5 ? 'MAIS VENDIDO' : p.gb_limit === 20 ? 'MELHOR PREÇO' : null
+          return { gb, price, perGb, highlight, badge }
+        })
+        setPlans(mapped)
+      })
+      .catch(() => { /* mantém preços padrão */ })
+  }, [])
+
   // Popup LUMA30
   const [showPopup, setShowPopup]     = useState(false)
   const [popupCopied, setPopupCopied] = useState(false)
@@ -538,12 +565,7 @@ export default function LandingPage() {
           )}
 
           <div className="cards-4">
-            {[
-              { gb: '3',  price: 'R$ 24,90',  perGb: 'R$ 8,30/GB',  highlight: false, badge: null },
-              { gb: '5',  price: 'R$ 41,90',  perGb: 'R$ 8,38/GB',  highlight: true,  badge: 'MAIS VENDIDO' },
-              { gb: '10', price: 'R$ 79,90',  perGb: 'R$ 7,99/GB',  highlight: false, badge: null },
-              { gb: '20', price: 'R$ 157,90', perGb: 'R$ 7,90/GB',  highlight: false, badge: 'MELHOR PREÇO' },
-            ].map((p, i) => {
+            {plans.map((p, i) => {
               return (
               <Reveal key={p.gb} delay={i * 80}>
                 <div className={`pricing-card${p.highlight ? ' pricing-card-highlight' : ''}`} style={{ border: p.highlight ? `1.5px solid ${AC}` : '1px solid rgba(255,255,255,.08)', background: p.highlight ? `linear-gradient(180deg, color-mix(in srgb,${AC} 16%,transparent), rgba(255,255,255,.01))` : 'rgba(255,255,255,.02)', boxShadow: p.highlight ? `0 12px 40px color-mix(in srgb,${AC} 28%,transparent)` : 'none' }}>
