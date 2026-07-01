@@ -547,7 +547,7 @@ export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
               {loggedIn && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(244,242,248,.4)', fontFamily: "'JetBrains Mono',monospace" }}>Telefone (opcional)</label>
+                    <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(244,242,248,.4)', fontFamily: "'JetBrains Mono',monospace" }}>Telefone / WhatsApp</label>
                     <input
                       type="tel"
                       value={whatsapp}
@@ -575,7 +575,8 @@ export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
               <div style={{ padding: '14px 24px 20px', borderTop: '1px solid rgba(255,255,255,.06)', flexShrink: 0 }}>
                 {(() => {
                   const intentPending = loggedIn && activeProxy !== undefined && activeProxy !== null && purchaseIntent === null
-                  const canGo = !intentPending
+                  const phoneDigits = whatsapp.replace(/\D/g, '').length
+                  const canGo = !intentPending && phoneDigits >= 10
                   return (
                     <>
                       <button
@@ -599,6 +600,11 @@ export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
                       {intentPending && (
                         <div style={{ marginTop: 8, textAlign: 'center', fontSize: 12, color: 'rgba(244,242,248,.4)' }}>
                           Escolha entre recarregar ou criar uma nova proxy.
+                        </div>
+                      )}
+                      {!intentPending && whatsapp.replace(/\D/g, '').length > 0 && whatsapp.replace(/\D/g, '').length < 10 && (
+                        <div style={{ marginTop: 8, textAlign: 'center', fontSize: 12, color: '#f87171' }}>
+                          Informe um telefone válido com DDD.
                         </div>
                       )}
                     </>
