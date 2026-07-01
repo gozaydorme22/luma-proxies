@@ -6,13 +6,6 @@ import { createServerClient } from '@/lib/supabase/server'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
-const PLANS: Record<string, { price: number; label: string }> = {
-  '3':  { price: 18.90,  label: '3 GB'  },
-  '5':  { price: 31.90,  label: '5 GB'  },
-  '10': { price: 60.90,  label: '10 GB' },
-  '20': { price: 120.90, label: '20 GB' },
-}
-
 export async function POST(req: NextRequest) {
   const hdrs = await headers()
   const uid  = hdrs.get('x-uid')
@@ -24,17 +17,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Campos obrigatórios ausentes.' }, { status: 400 })
   }
 
-  const plan = PLANS[String(gb)]
-  if (!plan) {
-    return NextResponse.json({ error: 'Plano inválido.' }, { status: 400 })
-  }
-
   const cleanCpf = (cpf as string).replace(/\D/g, '')
   if (cleanCpf.length !== 11) {
     return NextResponse.json({ error: 'CPF inválido.' }, { status: 400 })
   }
 
   const supabase = createServerClient()
+
+  // Busca preço do banco — fonte única de verdade
+  const { data: product } = await supabase
+    .from('products')
+    .select('price, name')
+    .eq('gb_limit', Number(gb))
+    .eq('active', true)
+    .single()
+
+  if (!product) {
+    return NextResponse.json({ error: 'Plano inválido.' }, { status: 400 })
+  }
+
   const { data: client, error: clientErr } = await supabase
     .from('clients')
     .select('email, name')
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest) {
 
   // Validate coupon server-side from DB
   let appliedCoupon: string | null = null
-  let amount = plan.price
+  let amount = Number(product.price)
 
   if (coupon) {
     const code = (coupon as string).trim().toUpperCase()
@@ -63,13 +64,13 @@ export async function POST(req: NextRequest) {
       const isExpired   = couponData.expires_at && new Date(couponData.expires_at) < new Date()
       const isExhausted = couponData.max_uses !== null && couponData.uses_count >= couponData.max_uses
       if (!isExpired && !isExhausted) {
-        amount = Math.round(plan.price * (1 - Number(couponData.discount_pct)) * 100) / 100
+        amount = Math.round(Number(product.price) * (1 - Number(couponData.discount_pct)) * 100) / 100
         appliedCoupon = code
       }
     }
   }
 
-  const plan_label = plan.label
+  const plan_label = `${gb} GB`
 
   if (whatsapp) {
     await supabase.from('clients').update({ whatsapp }).eq('id', uid)

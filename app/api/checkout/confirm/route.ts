@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
         </tr>
         ${coupon ? `<tr>
           <td style="color:rgba(244,242,248,.4);">Cupom</td>
-          <td style="color:#34d399;text-align:right;font-family:'Courier New',monospace;">${coupon} · −10%</td>
+          <td style="color:#34d399;text-align:right;font-family:'Courier New',monospace;">${coupon}</td>
         </tr>` : ''}
         <tr>
           <td style="color:rgba(244,242,248,.4);">Total</td>

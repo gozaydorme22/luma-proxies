@@ -8,14 +8,15 @@ import { QRCodeSVG } from 'qrcode.react'
 const AC  = '#a855f7'
 const AC2 = 'color-mix(in srgb,#a855f7 45%,#ffffff)'
 
-const PLANS = [
-  { gb: '3',  price: 18.90,  label: '3 GB',  perGb: 6.30  },
-  { gb: '5',  price: 31.90,  label: '5 GB',  perGb: 6.38  },
-  { gb: '10', price: 60.90,  label: '10 GB', perGb: 6.09  },
-  { gb: '20', price: 120.90, label: '20 GB', perGb: 6.045 },
-]
+interface Plan { gb: string; price: number; label: string; perGb: number }
 
-// discount_pct is now dynamic, fetched from DB per coupon code
+// Preços corretos usados como fallback enquanto o fetch carrega
+const FALLBACK_PLANS: Plan[] = [
+  { gb: '3',  price: 24.90,  label: '3 GB',  perGb: 8.30  },
+  { gb: '5',  price: 41.90,  label: '5 GB',  perGb: 8.38  },
+  { gb: '10', price: 79.90,  label: '10 GB', perGb: 7.99  },
+  { gb: '20', price: 157.90, label: '20 GB', perGb: 7.895 },
+]
 
 function fmt(v: number) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -49,8 +50,9 @@ interface Props {
 }
 
 export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
-  const planIdx = PLANS.findIndex(p => p.gb === initialPlan)
-  const [idx, setIdx]       = useState(planIdx >= 0 ? planIdx : 2)
+  const [plans, setPlans]   = useState<Plan[]>(FALLBACK_PLANS)
+  const planIdx = FALLBACK_PLANS.findIndex(p => p.gb === initialPlan)
+  const [idx, setIdx]       = useState(planIdx >= 0 ? planIdx : 1)
   const [method, setMethod] = useState<'pix' | 'crypto'>('pix')
   const [step, setStep]     = useState<'form' | 'summary' | 'pix'>('form')
 
@@ -73,7 +75,7 @@ export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
   const [pixStatus, setPixStatus] = useState<'pending' | 'completed' | 'failed'>('pending')
   const [copied,    setCopied]    = useState(false)
 
-  const plan        = PLANS[idx]
+  const plan        = plans[idx] ?? FALLBACK_PLANS[1]
   const discountAmt = couponApplied ? plan.price * couponDiscountPct : 0
   const total       = plan.price - discountAmt
   const loggedIn    = user !== undefined && user !== null
@@ -83,6 +85,26 @@ export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = '' }
   }, [])
+
+  // Busca preços do banco; fallback mantém os preços corretos enquanto carrega
+  useEffect(() => {
+    fetch('/api/products')
+      .then(r => r.json())
+      .then((data: Array<{ gb_limit: number; price: number }>) => {
+        if (!Array.isArray(data) || data.length < 2) return
+        const mapped: Plan[] = data.map(p => ({
+          gb:    String(p.gb_limit),
+          price: p.price,
+          label: `${p.gb_limit} GB`,
+          perGb: p.price / p.gb_limit,
+        }))
+        setPlans(mapped)
+        // Re-seleciona o idx correto caso o array tenha mudado de tamanho
+        const newIdx = mapped.findIndex(p => p.gb === initialPlan)
+        if (newIdx >= 0) setIdx(newIdx)
+      })
+      .catch(() => { /* mantém fallback */ })
+  }, [initialPlan])
 
   // No auto-coupon — user types the code manually
 
@@ -285,7 +307,7 @@ export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
               <div>
                 <div style={LABEL}>Selecione o plano</div>
                 <div className="checkout-plan-grid">
-                  {PLANS.map((p, i) => {
+                  {plans.map((p, i) => {
                     const active     = i === idx
                     const hasDisc    = !!couponApplied
                     const finalPrice = hasDisc ? p.price * (1 - couponDiscountPct) : p.price
@@ -522,7 +544,7 @@ export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: 'rgba(244,242,248,.55)' }}>
                       <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, background: 'rgba(52,211,153,.1)', border: '1px solid rgba(52,211,153,.2)', borderRadius: 5, padding: '2px 7px', color: '#34d399', letterSpacing: '.05em' }}>{couponApplied}</span>
-                      desconto 10%
+                      desconto {Math.round(couponDiscountPct * 100)}%
                     </span>
                     <span style={{ fontSize: 14, color: 'rgba(52,211,153,.8)' }}>− {fmt(discountAmt)}</span>
                   </div>
