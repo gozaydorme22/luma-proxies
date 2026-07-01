@@ -215,13 +215,13 @@ export async function POST(req: NextRequest) {
         return
       }
 
-      const { count: claimedCount } = await supabase.from('proxies')
+      const { data: claimedRows } = await supabase.from('proxies')
         .update({ status: 'sold', assigned_to: meta.uid, sold_at: new Date().toISOString() })
         .eq('id', stockProxy.id)
         .eq('status', 'available')
-        .select('id', { count: 'exact', head: true })
+        .select('id')
 
-      if (!claimedCount || claimedCount === 0) {
+      if (!claimedRows || claimedRows.length === 0) {
         console.error('[webhook] proxy claim race — another webhook claimed this proxy')
         sendAdminAlert()
         return
