@@ -116,22 +116,16 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
               Recarga
             </button>
             <NavLink href="/dashboard/pedidos"  active={is('pedidos')}  label="Pedidos"       onClick={closeSidebar} icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18M16 10a4 4 0 0 1-8 0"/></svg>}/>
-            <NavDim label="Datacenter" icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M8 4v16"/></svg>}/>
-            <NavDim label="Cashback"   icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 10h18M7 15h2M12 15h4M5 19h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2Z"/></svg>}/>
-            <NavDim label="Afiliados"  icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2 4 5v6c0 5 3.4 8.5 8 11 4.6-2.5 8-6 8-11V5Z"/></svg>}/>
             <NavLink href="/dashboard/perfil" active={is('perfil')} label="Meu Perfil" onClick={closeSidebar} icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>}/>
-            <NavDim label="Ajuda"      icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 4.5 1.5c0 1.5-2 2-2 3M12 17h.01"/></svg>}/>
-          </div>
-
-          <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 9.5, letterSpacing: '.18em', color: 'rgba(244,242,248,.32)', textTransform: 'uppercase', padding: '18px 8px 8px' }}>Desenvolvedor</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <NavDim label="API" icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m8 8-4 4 4 4M16 8l4 4-4 4"/></svg>}/>
           </div>
         </div>
 
         <div style={{ padding: 14, borderTop: '1px solid rgba(255,255,255,.07)', display: 'flex', flexDirection: 'column', gap: 3 }}>
           <a href="#" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 11, fontSize: 13.5, fontWeight: 600, color: 'rgba(244,242,248,.55)', textDecoration: 'none' }}>
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-3.6-7.2L21 4"/></svg>
+            <svg width="18" height="18" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M16 3C9.373 3 4 8.373 4 15c0 2.385.685 4.613 1.87 6.5L4 29l7.77-1.836A12.93 12.93 0 0 0 16 28c6.627 0 12-5.373 12-12S22.627 3 16 3Z" fill="#25D366"/>
+              <path d="M22.003 19.274c-.301-.15-1.779-.878-2.054-.978-.275-.1-.475-.15-.675.15-.2.3-.775.978-.95 1.178-.175.2-.35.225-.651.075-.3-.15-1.267-.467-2.414-1.49-.892-.797-1.494-1.78-1.669-2.08-.175-.3-.018-.462.132-.61.134-.134.3-.35.45-.525.15-.175.2-.3.3-.5.1-.2.05-.375-.025-.525-.075-.15-.675-1.628-.925-2.228-.244-.583-.491-.504-.675-.513l-.575-.01c-.2 0-.525.075-.8.375-.275.3-1.05 1.028-1.05 2.506 0 1.477 1.075 2.906 1.225 3.106.15.2 2.115 3.228 5.124 4.528.716.309 1.274.494 1.71.632.718.229 1.373.196 1.89.119.576-.086 1.779-.727 2.03-1.428.25-.702.25-1.302.175-1.428-.075-.125-.275-.2-.575-.35Z" fill="#fff"/>
+            </svg>
             Grupo WhatsApp
           </a>
           <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 11, fontSize: 13.5, fontWeight: 600, color: 'rgba(244,242,248,.55)', textDecoration: 'none' }}>
