@@ -7,7 +7,7 @@ import { Card } from '@/components/ui/Card'
 import { Badge, statusVariant } from '@/components/ui/Badge'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
-import { Search, Trash2 } from 'lucide-react'
+import { Search, Trash2, Check, Minus } from 'lucide-react'
 
 interface Order {
   id: string
@@ -35,6 +35,30 @@ function statusLabel(s: string) {
     cancelado: 'Cancelado', reembolsado: 'Reembolsado',
   }
   return map[s] ?? s
+}
+
+const AC = '#a855f7'
+
+function Checkbox({ checked, indeterminate, onChange }: { checked: boolean; indeterminate?: boolean; onChange: () => void }) {
+  const active = checked || indeterminate
+  return (
+    <div
+      onClick={e => { e.stopPropagation(); onChange() }}
+      style={{
+        width: 16, height: 16, borderRadius: 5, flexShrink: 0,
+        border: `1.5px solid ${active ? AC : 'rgba(255,255,255,.2)'}`,
+        background: active ? AC : 'rgba(255,255,255,.04)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        cursor: 'pointer', transition: 'all .15s',
+      }}
+    >
+      {indeterminate && !checked
+        ? <Minus size={10} color="#0a0612" strokeWidth={3} />
+        : checked
+        ? <Check size={10} color="#0a0612" strokeWidth={3} />
+        : null}
+    </div>
+  )
 }
 
 const STATUS_OPTS = [
@@ -148,13 +172,7 @@ export default function AdminPedidosPage() {
               <thead>
                 <tr className="border-b border-(--border)">
                   <th className="px-4 py-3 w-10">
-                    <input
-                      type="checkbox"
-                      checked={allSelected}
-                      ref={el => { if (el) el.indeterminate = someSelected && !allSelected }}
-                      onChange={toggleAll}
-                      style={{ width: 15, height: 15, cursor: 'pointer', accentColor: '#a855f7' }}
-                    />
+                    <Checkbox checked={allSelected} indeterminate={someSelected && !allSelected} onChange={toggleAll} />
                   </th>
                   {['ID', 'Cliente', 'Produto', 'Total', 'Data', 'Status'].map(h => (
                     <th key={h} className="text-left text-xs font-medium text-(--text-faint) px-4 py-3">{h}</th>
@@ -175,13 +193,8 @@ export default function AdminPedidosPage() {
                       onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'rgba(255,255,255,.02)' }}
                       onMouseLeave={e => { e.currentTarget.style.background = isSelected ? 'rgba(168,85,247,.06)' : 'transparent' }}
                     >
-                      <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => toggleOne(o.id)}
-                          style={{ width: 15, height: 15, cursor: 'pointer', accentColor: '#a855f7' }}
-                        />
+                      <td className="px-4 py-3">
+                        <Checkbox checked={isSelected} onChange={() => toggleOne(o.id)} />
                       </td>
                       <td className="px-4 py-3 font-mono text-xs text-(--text-faint)">{o.id.slice(0, 8)}</td>
                       <td className="px-4 py-3">
