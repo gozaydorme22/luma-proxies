@@ -327,15 +327,18 @@ export default function LandingPage() {
       .then(r => r.json())
       .then((data: Array<{ gb_limit: number; price: number }>) => {
         if (!Array.isArray(data) || !data.length) return
-        const mapped: Plan[] = data.map(p => {
-          const gb        = String(p.gb_limit)
-          const price     = p.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-          const perGb     = (p.price / p.gb_limit).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) + '/GB'
-          const highlight = p.gb_limit === 5
-          const badge     = p.gb_limit === 5 ? 'MAIS VENDIDO' : p.gb_limit === 20 ? 'MELHOR PREÇO' : null
-          return { gb, price, perGb, highlight, badge }
-        })
-        setPlans(mapped)
+        // Só atualiza o preço dos planos que existem no banco —
+        // nunca remove um card se o plano não estiver no DB
+        const priceMap: Record<number, number> = {}
+        data.forEach(p => { priceMap[Number(p.gb_limit)] = p.price })
+        setPlans(prev => prev.map(plan => {
+          const gb = Number(plan.gb)
+          if (!priceMap[gb]) return plan
+          const p    = priceMap[gb]
+          const price = p.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+          const perGb = (p / gb).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) + '/GB'
+          return { ...plan, price, perGb }
+        }))
       })
       .catch(() => { /* mantém preços padrão */ })
   }, [])
