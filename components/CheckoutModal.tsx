@@ -607,21 +607,35 @@ export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
                 <div>
                   <div style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 700, fontSize: 20, color: '#34d399', marginBottom: 6 }}>Pagamento confirmado!</div>
                   <p style={{ fontSize: 14, color: 'rgba(244,242,248,.5)', margin: 0, lineHeight: 1.7 }}>
-                    Você receberá as credenciais da sua proxy por email em breve.<br />
-                    Pode fechar esta janela.
+                    Suas credenciais serão enviadas por email em instantes.<br />
+                    Acesse o dashboard para acompanhar sua proxy.
                   </p>
                 </div>
-                <button
-                  onClick={onClose}
-                  style={{
-                    marginTop: 8, background: AC, color: '#ffffff', fontWeight: 700, fontSize: 14,
-                    padding: '12px 28px', border: 'none', borderRadius: 12, cursor: 'pointer',
-                    boxShadow: `0 8px 24px color-mix(in srgb,${AC} 40%,transparent)`,
-                    fontFamily: "'Manrope',sans-serif",
-                  }}
-                >
-                  Fechar
-                </button>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%', maxWidth: 280 }}>
+                  <Link
+                    href="/dashboard"
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                      background: AC, color: '#ffffff', fontWeight: 700, fontSize: 14,
+                      padding: '13px 28px', borderRadius: 12, textDecoration: 'none',
+                      boxShadow: `0 8px 24px color-mix(in srgb,${AC} 40%,transparent)`,
+                      fontFamily: "'Manrope',sans-serif",
+                    }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                    Ir para o dashboard
+                  </Link>
+                  <button
+                    onClick={onClose}
+                    style={{
+                      background: 'rgba(255,255,255,.06)', color: 'rgba(244,242,248,.5)', fontWeight: 600, fontSize: 13,
+                      padding: '11px 28px', border: '1px solid rgba(255,255,255,.08)', borderRadius: 12, cursor: 'pointer',
+                      fontFamily: "'Manrope',sans-serif",
+                    }}
+                  >
+                    Fechar
+                  </button>
+                </div>
               </div>
             ) : pixStatus === 'failed' ? (
               /* ── Failed ── */
