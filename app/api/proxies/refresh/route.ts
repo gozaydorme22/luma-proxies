@@ -42,7 +42,7 @@ export async function POST() {
       const lookupKey  = mgmtUsername(proxy.username)
       const realUsedGb = usageMap.get(lookupKey)
       if (realUsedGb === undefined) continue
-      if (Math.abs(realUsedGb - Number(proxy.used_gb)) < 0.0001) continue
+      if (realUsedGb === Number(proxy.used_gb)) continue
 
       await supabase
         .from('proxies')
