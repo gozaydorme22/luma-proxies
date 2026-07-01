@@ -119,16 +119,16 @@ export function makeUsername(uid: string): string {
 }
 
 // Connection username for proxy clients on proxy.smartproxy.net:3120.
-// This gateway authenticates with the base username only — the -country-XX suffix
-// is not supported on this endpoint and causes auth failures.
-export function connectionUsername(baseUsername: string, countryCode: string | null = null): string {
+// Country targeting uses underscore separator + area-XX format (e.g. smart-user_area-BR).
+// Hyphen-based suffixes (-country-br, -area-BR) cause auth failures on this gateway.
+export function connectionUsername(baseUsername: string, countryCode: string | null = 'BR'): string {
   const full = baseUsername.startsWith('smart-') ? baseUsername : `smart-${baseUsername}`
-  return countryCode ? `${full}-country-${countryCode}` : full
+  return countryCode ? `${full}_area-${countryCode.toUpperCase()}` : full
 }
 
-// Strip -country-XX suffix to recover the management username for SmartProxy API lookups
+// Strip _area-XX suffix to recover the management username for SmartProxy API lookups
 export function mgmtUsername(username: string): string {
-  return username.replace(/-country-[a-z]{2}$/, '')
+  return username.replace(/_area-[A-Z]{2}$/, '')
 }
 
 export function makePassword(): string {
