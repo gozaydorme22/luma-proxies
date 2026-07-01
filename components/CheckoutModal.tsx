@@ -76,7 +76,6 @@ export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
   const couponRef = useRef<HTMLInputElement>(null)
 
   const [whatsapp, setWhatsapp] = useState('')
-  const [cpf, setCpf]           = useState('')
 
   const [loading, setLoading]   = useState(false)
   const [payError, setPayError] = useState<string | null>(null)
@@ -95,7 +94,6 @@ export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
   const discountAmt = couponApplied ? plan.price * couponDiscountPct : 0
   const total       = plan.price - discountAmt
   const loggedIn    = user !== undefined && user !== null
-  const cpfValid    = validateCpf(cpf.replace(/\D/g, ''))
 
   useEffect(() => {
     document.body.style.overflow = 'hidden'
@@ -215,7 +213,6 @@ export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           gb:          Number(plan.gb),
-          cpf,
           whatsapp:    whatsapp.trim() || null,
           coupon:      couponApplied,
           is_recharge: purchaseIntent === 'recharge',
@@ -546,46 +543,24 @@ export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
                 </div>
               )}
 
-              {/* Contato — WhatsApp + CPF */}
+              {/* Contato — WhatsApp */}
               {loggedIn && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(244,242,248,.4)', fontFamily: "'JetBrains Mono',monospace" }}>CPF</label>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        value={cpf}
-                        onChange={e => setCpf(maskCpf(e.target.value))}
-                        placeholder="000.000.000-00"
-                        style={{
-                          background: 'rgba(255,255,255,.04)',
-                          border: `1px solid ${cpf.replace(/\D/g,'').length === 11 && !cpfValid ? 'rgba(248,113,113,.4)' : 'rgba(255,255,255,.1)'}`,
-                          borderRadius: 11, padding: '13px 16px', color: '#f4f2f8', fontSize: 14,
-                          fontFamily: "'JetBrains Mono',monospace", letterSpacing: '.06em', outline: 'none',
-                          transition: 'border-color .12s', width: '100%', boxSizing: 'border-box',
-                        }}
-                      />
-                      {cpf.replace(/\D/g,'').length === 11 && !cpfValid && (
-                        <div style={{ fontSize: 11, color: '#f87171', marginTop: 2 }}>CPF inválido — verifique os dígitos.</div>
-                      )}
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(244,242,248,.4)', fontFamily: "'JetBrains Mono',monospace" }}>Telefone</label>
-                      <input
-                        type="tel"
-                        value={whatsapp}
-                        onChange={e => setWhatsapp(e.target.value.replace(/\D/g, '').slice(0, 11))}
-                        placeholder="(00) 00000-0000"
-                        style={{
-                          background: 'rgba(255,255,255,.04)',
-                          border: '1px solid rgba(255,255,255,.1)',
-                          borderRadius: 11, padding: '13px 16px', color: '#f4f2f8', fontSize: 14,
-                          fontFamily: "'JetBrains Mono',monospace", letterSpacing: '.04em', outline: 'none',
-                          width: '100%', boxSizing: 'border-box',
-                        }}
-                      />
-                    </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(244,242,248,.4)', fontFamily: "'JetBrains Mono',monospace" }}>Telefone (opcional)</label>
+                    <input
+                      type="tel"
+                      value={whatsapp}
+                      onChange={e => setWhatsapp(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                      placeholder="(00) 00000-0000"
+                      style={{
+                        background: 'rgba(255,255,255,.04)',
+                        border: '1px solid rgba(255,255,255,.1)',
+                        borderRadius: 11, padding: '13px 16px', color: '#f4f2f8', fontSize: 14,
+                        fontFamily: "'JetBrains Mono',monospace", letterSpacing: '.04em', outline: 'none',
+                        width: '100%', boxSizing: 'border-box',
+                      }}
+                    />
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'rgba(244,242,248,.3)' }}>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
@@ -600,7 +575,7 @@ export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
               <div style={{ padding: '14px 24px 20px', borderTop: '1px solid rgba(255,255,255,.06)', flexShrink: 0 }}>
                 {(() => {
                   const intentPending = loggedIn && activeProxy !== undefined && activeProxy !== null && purchaseIntent === null
-                  const canGo = cpfValid && !intentPending
+                  const canGo = !intentPending
                   return (
                     <>
                       <button

@@ -11,15 +11,10 @@ export async function POST(req: NextRequest) {
   const uid  = hdrs.get('x-uid')
   if (!uid) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { gb, cpf, whatsapp, coupon, is_recharge } = await req.json()
+  const { gb, whatsapp, coupon, is_recharge } = await req.json()
 
-  if (!gb || !cpf) {
-    return NextResponse.json({ error: 'Campos obrigatórios ausentes.' }, { status: 400 })
-  }
-
-  const cleanCpf = (cpf as string).replace(/\D/g, '')
-  if (cleanCpf.length !== 11) {
-    return NextResponse.json({ error: 'CPF inválido.' }, { status: 400 })
+  if (!gb) {
+    return NextResponse.json({ error: 'Plano não informado.' }, { status: 400 })
   }
 
   const supabase = createServerClient()
@@ -103,7 +98,6 @@ export async function POST(req: NextRequest) {
       webhookUrl,
       client: {
         name:  client.name || client.email.split('@')[0],
-        cpf:   cleanCpf,
         email: client.email,
         phone: ((whatsapp as string | undefined) ?? '').replace(/\D/g, ''),
       },

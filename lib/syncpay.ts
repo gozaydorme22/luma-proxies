@@ -40,7 +40,6 @@ export interface CashInOpts {
   webhookUrl:  string
   client: {
     name:  string
-    cpf:   string   // 11 digits, no mask
     email: string
     phone: string   // 10-11 digits, no mask — omit if empty
   }
@@ -57,7 +56,6 @@ export async function createPixCashIn(opts: CashInOpts): Promise<CashInResult> {
 
   const clientPayload: Record<string, string> = {
     name:  opts.client.name,
-    cpf:   opts.client.cpf,
     email: opts.client.email,
   }
   if (opts.client.phone) clientPayload.phone = opts.client.phone
