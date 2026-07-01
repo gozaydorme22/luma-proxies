@@ -15,7 +15,7 @@ function AnimBar({ pct, color }: { pct: number; color: string }) {
 
 interface Proxy {
   id: string; name: string; proxyUser: string | null; proxyPass: string | null
-  type: string; status: 'ativa' | 'inativa'; host: string | null; port: number | null
+  type: string; status: 'ativa' | 'inativa' | 'suspensa'; host: string | null; port: number | null
   threads: number | null; totalGb: number; usedGb: number
 }
 
