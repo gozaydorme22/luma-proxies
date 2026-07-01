@@ -87,6 +87,7 @@ export default function ProxiesPage() {
   const [revealed, setRevealed]     = useState<Record<string, boolean>>({})
   const [search, setSearch]         = useState('')
   const [filter, setFilter]         = useState<'all' | 'ativa' | 'inativa'>('all')
+  const [hoverIdx, setHoverIdx]     = useState<number | null>(null)
 
   async function loadProxies() {
     const d = await fetch('/api/proxies').then(r => r.json()).catch(() => ({}))
@@ -188,8 +189,17 @@ export default function ProxiesPage() {
             ))}
           </div>
         </div>
-        <div style={{ marginTop: 18 }}>
-          <svg viewBox="0 0 720 200" preserveAspectRatio="none" style={{ width: '100%', height: 190, display: 'block' }}>
+        <div style={{ marginTop: 18, position: 'relative' }}
+          onMouseLeave={() => setHoverIdx(null)}
+        >
+          <svg viewBox="0 0 720 200" preserveAspectRatio="none" style={{ width: '100%', height: 190, display: 'block', cursor: 'crosshair' }}
+            onMouseMove={e => {
+              const rect = (e.currentTarget as SVGSVGElement).getBoundingClientRect()
+              const pct  = (e.clientX - rect.left) / rect.width
+              const idx  = Math.round(pct * (activeData.length - 1))
+              setHoverIdx(Math.max(0, Math.min(activeData.length - 1, idx)))
+            }}
+          >
             <defs>
               <linearGradient id="lumaArea" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor={`color-mix(in srgb,${AC} 55%,transparent)`}/>
@@ -201,7 +211,45 @@ export default function ProxiesPage() {
             <line x1="0" y1="150" x2="720" y2="150" stroke="rgba(255,255,255,.05)" strokeWidth="1"/>
             {chart.area && <path d={chart.area} fill="url(#lumaArea)"/>}
             {chart.line && <path d={chart.line} fill="none" stroke={AC2} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="1400" style={{ animation: 'lumaDraw 1.4s ease both' }}/>}
+            {hoverIdx !== null && (() => {
+              const n    = activeData.length
+              const max  = Math.max(...activeData)
+              const svgX = (hoverIdx / (n - 1)) * 720
+              const svgY = max > 0 ? 200 - 18 - (activeData[hoverIdx] / max) * (200 - 36) : 182
+              return <>
+                <line x1={svgX} y1="0" x2={svgX} y2="200" stroke="rgba(255,255,255,.18)" strokeWidth="1" strokeDasharray="4 3"/>
+                <circle cx={svgX} cy={svgY} r="4.5" fill={AC} stroke="#0a0612" strokeWidth="2.5"/>
+              </>
+            })()}
           </svg>
+
+          {hoverIdx !== null && (() => {
+            const n       = activeData.length
+            const daysAgo = n - 1 - hoverIdx
+            const label   = range === '24h'
+              ? (daysAgo === 0 ? 'agora' : `${daysAgo}h atrás`)
+              : (daysAgo === 0 ? 'hoje'  : `${daysAgo}d atrás`)
+            const leftPct = (hoverIdx / (n - 1)) * 100
+            return (
+              <div style={{
+                position: 'absolute', top: 8,
+                left: `${leftPct}%`,
+                transform: leftPct > 75 ? 'translateX(-100%)' : leftPct < 10 ? 'translateX(0)' : 'translateX(-50%)',
+                background: 'rgba(13,11,18,.94)',
+                border: `1px solid color-mix(in srgb,${AC} 30%,transparent)`,
+                borderRadius: 9, padding: '7px 12px', pointerEvents: 'none', whiteSpace: 'nowrap',
+                boxShadow: `0 4px 20px color-mix(in srgb,${AC} 18%,transparent)`,
+              }}>
+                <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 13, fontWeight: 700, color: '#f4f2f8' }}>
+                  {fmtGb(activeData[hoverIdx])}
+                </div>
+                <div style={{ fontSize: 10.5, color: 'rgba(244,242,248,.4)', marginTop: 2, fontFamily: "'Manrope',sans-serif" }}>
+                  {label}
+                </div>
+              </div>
+            )
+          })()}
+
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontFamily: "'JetBrains Mono',monospace", fontSize: 9.5, color: 'rgba(244,242,248,.35)' }}>
             {xLabels[range].map(l => <span key={l}>{l}</span>)}
           </div>
