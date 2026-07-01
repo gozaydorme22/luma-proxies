@@ -10,12 +10,12 @@ const AC2 = 'color-mix(in srgb,#a855f7 45%,#ffffff)'
 
 interface Plan { gb: string; price: number; label: string; perGb: number }
 
-// Preços corretos usados como fallback enquanto o fetch carrega
+// Preços base (antes do cupom LUMA30 −30%)
 const FALLBACK_PLANS: Plan[] = [
-  { gb: '3',  price: 24.90,  label: '3 GB',  perGb: 8.30  },
-  { gb: '5',  price: 41.90,  label: '5 GB',  perGb: 8.38  },
-  { gb: '10', price: 79.90,  label: '10 GB', perGb: 7.99  },
-  { gb: '20', price: 157.90, label: '20 GB', perGb: 7.895 },
+  { gb: '3',  price: 27.21,  label: '3 GB',  perGb: 9.07  },
+  { gb: '5',  price: 44.29,  label: '5 GB',  perGb: 8.858 },
+  { gb: '10', price: 87.00,  label: '10 GB', perGb: 8.70  },
+  { gb: '20', price: 172.00, label: '20 GB', perGb: 8.60  },
 ]
 
 function fmt(v: number) {
@@ -92,12 +92,14 @@ export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
       .then(r => r.json())
       .then((data: Array<{ gb_limit: number; price: number }>) => {
         if (!Array.isArray(data) || data.length < 2) return
-        const mapped: Plan[] = data.map(p => ({
-          gb:    String(p.gb_limit),
-          price: p.price,
-          label: `${p.gb_limit} GB`,
-          perGb: p.price / p.gb_limit,
-        }))
+        const mapped: Plan[] = data
+          .sort((a, b) => a.gb_limit - b.gb_limit)
+          .map(p => ({
+            gb:    String(p.gb_limit),
+            price: p.price,
+            label: `${p.gb_limit} GB`,
+            perGb: p.price / p.gb_limit,
+          }))
         setPlans(mapped)
         // Re-seleciona o idx correto caso o array tenha mudado de tamanho
         const newIdx = mapped.findIndex(p => p.gb === initialPlan)

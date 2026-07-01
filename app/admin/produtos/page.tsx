@@ -27,10 +27,10 @@ function parseBRL(s: string): number {
 const AC = '#a855f7'
 
 const CORRECT_PLANS: Array<{ gb: number; price: number; name: string }> = [
-  { gb: 3,  price: 24.90,  name: 'Proxy Rotativa 3GB'  },
-  { gb: 5,  price: 41.90,  name: 'Proxy Rotativa 5GB'  },
-  { gb: 10, price: 79.90,  name: 'Proxy Rotativa 10GB' },
-  { gb: 20, price: 157.90, name: 'Proxy Rotativa 20GB' },
+  { gb: 3,  price: 27.21,  name: 'Proxy Rotativa 3GB'  },
+  { gb: 5,  price: 44.29,  name: 'Proxy Rotativa 5GB'  },
+  { gb: 10, price: 87.00,  name: 'Proxy Rotativa 10GB' },
+  { gb: 20, price: 172.00, name: 'Proxy Rotativa 20GB' },
 ]
 
 export default function AdminProdutosPage() {

@@ -315,10 +315,10 @@ export default function LandingPage() {
 
   type Plan = { gb: string; price: string; perGb: string; highlight: boolean; badge: string | null }
   const DEFAULT_PLANS: Plan[] = [
-    { gb: '3',  price: 'R$ 24,90',  perGb: 'R$ 8,30/GB',  highlight: false, badge: null },
-    { gb: '5',  price: 'R$ 41,90',  perGb: 'R$ 8,38/GB',  highlight: true,  badge: 'MAIS VENDIDO' },
-    { gb: '10', price: 'R$ 79,90',  perGb: 'R$ 7,99/GB',  highlight: false, badge: null },
-    { gb: '20', price: 'R$ 157,90', perGb: 'R$ 7,90/GB',  highlight: false, badge: 'MELHOR PREÇO' },
+    { gb: '3',  price: 'R$ 27,21',  perGb: 'R$ 9,07/GB',  highlight: false, badge: null },
+    { gb: '5',  price: 'R$ 44,29',  perGb: 'R$ 8,86/GB',  highlight: true,  badge: 'MAIS VENDIDO' },
+    { gb: '10', price: 'R$ 87,00',  perGb: 'R$ 8,70/GB',  highlight: false, badge: null },
+    { gb: '20', price: 'R$ 172,00', perGb: 'R$ 8,60/GB',  highlight: false, badge: 'MELHOR PREÇO' },
   ]
   const [plans, setPlans] = useState<Plan[]>(DEFAULT_PLANS)
 
