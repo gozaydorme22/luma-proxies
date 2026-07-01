@@ -15,7 +15,7 @@ const PLANS = [
   { gb: '20', price: 120.90, label: '20 GB', perGb: 6.045 },
 ]
 
-const COUPON_PERCENT = 0.10
+// discount_pct is now dynamic, fetched from DB per coupon code
 
 function fmt(v: number) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -54,11 +54,11 @@ export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
   const [method, setMethod] = useState<'pix' | 'crypto'>('pix')
   const [step, setStep]     = useState<'form' | 'summary' | 'pix'>('form')
 
-  const [couponEligible, setCouponEligible] = useState<boolean | null>(null)
-  const [couponInput, setCouponInput]       = useState('')
-  const [couponApplied, setCouponApplied]   = useState<string | null>(null)
-  const [couponError, setCouponError]       = useState<string | null>(null)
-  const [couponLoading, setCouponLoading]   = useState(false)
+  const [couponInput, setCouponInput]         = useState('')
+  const [couponApplied, setCouponApplied]     = useState<string | null>(null)
+  const [couponDiscountPct, setCouponDiscountPct] = useState(0)
+  const [couponError, setCouponError]         = useState<string | null>(null)
+  const [couponLoading, setCouponLoading]     = useState(false)
   const couponRef = useRef<HTMLInputElement>(null)
 
   const [whatsapp, setWhatsapp] = useState('')
@@ -74,7 +74,7 @@ export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
   const [copied,    setCopied]    = useState(false)
 
   const plan        = PLANS[idx]
-  const discountAmt = couponApplied ? plan.price * COUPON_PERCENT : 0
+  const discountAmt = couponApplied ? plan.price * couponDiscountPct : 0
   const total       = plan.price - discountAmt
   const loggedIn    = user !== undefined && user !== null
   const cpfValid    = cpf.replace(/\D/g, '').length === 11
@@ -84,16 +84,7 @@ export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
     return () => { document.body.style.overflow = '' }
   }, [])
 
-  useEffect(() => {
-    if (!user) return
-    fetch('/api/coupon/status')
-      .then(r => r.json())
-      .then(d => {
-        setCouponEligible(d.eligible)
-        if (d.eligible) { setCouponApplied('LUMA10'); setCouponInput('LUMA10') }
-      })
-      .catch(() => setCouponEligible(false))
-  }, [user])
+  // No auto-coupon — user types the code manually
 
   useEffect(() => {
     const fn = (e: KeyboardEvent) => {
@@ -123,20 +114,20 @@ export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
   }, [step, pixId, pixStatus])
 
   function removeCoupon() {
-    setCouponApplied(null); setCouponInput(''); setCouponError(null)
+    setCouponApplied(null); setCouponDiscountPct(0); setCouponInput(''); setCouponError(null)
   }
 
   async function applyCoupon() {
     const code = couponInput.trim().toUpperCase()
     setCouponError(null)
     if (!code) return
-    if (code !== 'LUMA10') { setCouponError('Cupom inválido.'); return }
     setCouponLoading(true)
     try {
-      const d = await fetch('/api/coupon/status').then(r => r.json()) as { eligible: boolean }
-      setCouponEligible(d.eligible)
-      if (!d.eligible) { setCouponError('Cupom já utilizado ou não disponível para sua conta.'); return }
-      setCouponApplied('LUMA10')
+      const r = await fetch(`/api/coupon/status?code=${encodeURIComponent(code)}`)
+      const d = await r.json() as { valid: boolean; discount_pct?: number; error?: string }
+      if (!d.valid) { setCouponError(d.error ?? 'Cupom inválido.'); return }
+      setCouponApplied(code)
+      setCouponDiscountPct(d.discount_pct ?? 0)
     } catch {
       setCouponError('Erro ao verificar cupom. Tente novamente.')
     } finally {
@@ -297,7 +288,7 @@ export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
                   {PLANS.map((p, i) => {
                     const active     = i === idx
                     const hasDisc    = !!couponApplied
-                    const finalPrice = hasDisc ? p.price * (1 - COUPON_PERCENT) : p.price
+                    const finalPrice = hasDisc ? p.price * (1 - couponDiscountPct) : p.price
                     return (
                       <button
                         key={p.gb}
@@ -320,7 +311,7 @@ export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
                           <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: active ? AC2 : 'rgba(244,242,248,.35)', marginTop: 5 }}>{fmt(p.price)}</div>
                         )}
                         <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 9, color: 'rgba(244,242,248,.2)', marginTop: 4 }}>
-                          {hasDisc ? fmtPerGb(finalPrice / Number(p.gb)) : fmtPerGb(p.perGb)}
+                          {hasDisc ? fmtPerGb(finalPrice / Number(p.gb)) : fmtPerGb(p.perGb ?? p.price / Number(p.gb))}
                         </div>
                       </button>
                     )
@@ -339,7 +330,7 @@ export function CheckoutModal({ initialPlan = '5', user, onClose }: Props) {
                       </span>
                       <div style={{ flex: 1, fontSize: 14 }}>
                         <span style={{ fontFamily: "'JetBrains Mono',monospace", fontWeight: 600, color: '#34d399', letterSpacing: '.06em' }}>{couponApplied}</span>
-                        <span style={{ color: 'rgba(244,242,248,.45)' }}> · 10% de desconto</span>
+                        <span style={{ color: 'rgba(244,242,248,.45)' }}> · {Math.round(couponDiscountPct * 100)}% de desconto</span>
                       </div>
                       <button onClick={removeCoupon} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(244,242,248,.25)', fontSize: 20, lineHeight: 1, padding: '0 2px', flexShrink: 0 }}>×</button>
                     </div>

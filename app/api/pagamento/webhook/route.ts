@@ -301,6 +301,21 @@ export async function POST(req: NextRequest) {
     }
 
     void proxyId
+
+    // Increment coupon uses_count
+    if (meta.coupon) {
+      const { data: couponRow } = await supabase
+        .from('coupons')
+        .select('id, uses_count')
+        .eq('code', meta.coupon)
+        .single()
+      if (couponRow) {
+        await supabase
+          .from('coupons')
+          .update({ uses_count: couponRow.uses_count + 1 })
+          .eq('id', couponRow.id)
+      }
+    }
   })
 
   function sendAdminAlert() {
