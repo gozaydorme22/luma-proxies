@@ -138,11 +138,14 @@ export async function POST(req: NextRequest) {
           const mgmtUser = mgmtUsername(proxyUser)
           const subAccounts = await listSubAccounts()
           const existing = subAccounts.find(u => u.username === mgmtUser)
+          // Add purchased GB to the existing cap (not to usage ceiling)
+          // e.g. 5GB cap + 10GB purchase = 15GB new cap, regardless of how much was used
+          const existingLimitGb = existing ? kbToGb(existing.limit_flow ?? 0) : 0
           alreadyUsedGb = existing ? kbToGb(existing.usage_flow ?? 0) : 0
-          const newLimit = Math.ceil(alreadyUsedGb) + meta.gb
+          const newLimit = existingLimitGb + meta.gb
           newGbLimit = newLimit
           await updateSubAccount(mgmtUser, { status: 1, limitGb: newLimit })
-          console.log('[webhook] recharge updated, new limit:', newLimit)
+          console.log('[webhook] recharge updated, new limit:', newLimit, '(was:', existingLimitGb, '+ new:', meta.gb, ')')
         } catch (e2) {
           console.error('[webhook] SmartProxy provision failed:', e2)
           sendAdminAlert()
@@ -166,6 +169,7 @@ export async function POST(req: NextRequest) {
 
       if (isRecharge && existingProxy?.password) {
         proxyPass = existingProxy.password
+        proxyLabel = `${newGbLimit} GB Residencial BR`
       } else if (!isRecharge) {
         newGbLimit = meta.gb
       }
