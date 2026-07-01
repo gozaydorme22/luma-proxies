@@ -25,6 +25,7 @@ export async function GET() {
     quantity:    o.quantity,
     totalBrl:    o.total_brl,
     status:      o.status as string,
+    orderType:   o.payment_method === 'pix_recarga' ? 'recarga' : o.payment_method === 'pix_nova' ? 'nova_proxy' : null,
     paidAt:      o.paid_at,
     createdAt:   o.created_at,
   }))

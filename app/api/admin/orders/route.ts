@@ -46,6 +46,7 @@ export async function GET(req: NextRequest) {
     totalBrl:      Number(o.total_brl),
     status:        o.status,
     paymentMethod: o.payment_method,
+    orderType:     o.payment_method === 'pix_recarga' ? 'recarga' : o.payment_method === 'pix_nova' ? 'nova_proxy' : null,
     paidAt:        o.paid_at,
     createdAt:     o.created_at,
   }))

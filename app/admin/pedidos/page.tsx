@@ -17,6 +17,7 @@ interface Order {
   totalBrl: number
   status: string
   paymentMethod: string
+  orderType: 'recarga' | 'nova_proxy' | null
   paidAt: string | null
   createdAt: string
 }
@@ -201,7 +202,19 @@ export default function AdminPedidosPage() {
                         <p className="text-sm text-(--text)">{o.clientName}</p>
                         <p className="text-xs text-(--text-faint)">{o.clientEmail}</p>
                       </td>
-                      <td className="px-4 py-3 text-(--text-muted)">Proxy Residencial · {o.quantity}GB</td>
+                      <td className="px-4 py-3 text-(--text-muted)">
+                        <span>Proxy Residencial · {o.quantity}GB</span>
+                        {o.orderType && (
+                          <span style={{
+                            marginLeft: 8, fontSize: 10, fontFamily: "'JetBrains Mono',monospace",
+                            letterSpacing: '.07em', fontWeight: 600, padding: '2px 6px', borderRadius: 5,
+                            background: o.orderType === 'recarga' ? 'rgba(168,85,247,.15)' : 'rgba(52,211,153,.12)',
+                            color: o.orderType === 'recarga' ? '#c084fc' : '#34d399',
+                          }}>
+                            {o.orderType === 'recarga' ? 'RECARGA' : 'NOVA'}
+                          </span>
+                        )}
+                      </td>
                       <td className="px-4 py-3 font-semibold text-(--text)">{fmtBRL(o.totalBrl)}</td>
                       <td className="px-4 py-3 text-(--text-faint) text-xs">{fmtDate(o.createdAt)}</td>
                       <td className="px-4 py-3">

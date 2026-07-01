@@ -8,7 +8,7 @@ const AC  = '#a855f7'
 interface Order {
   id: string; productName: string; productType: string
   unit: string; quantity: number; totalBrl: number
-  status: string; paidAt: string | null; createdAt: string
+  status: string; orderType: 'recarga' | 'nova_proxy' | null; paidAt: string | null; createdAt: string
 }
 
 function fmtDate(iso: string) {
@@ -62,10 +62,26 @@ export default function PedidosPage() {
                 <div className="order-item-grid">
                   <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
                     <span style={{ width: 38, height: 38, flexShrink: 0, borderRadius: 10, background: `color-mix(in srgb,${AC} 14%,transparent)`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: AC2 }}>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/></svg>
+                      {o.orderType === 'recarga'
+                        ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+                        : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/></svg>
+                      }
                     </span>
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 500, fontSize: 13.5 }}>{o.productName}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                        <span style={{ fontWeight: 500, fontSize: 13.5 }}>{o.productName}</span>
+                        {o.orderType && (
+                          <span style={{
+                            fontSize: 10, fontFamily: "'JetBrains Mono',monospace", letterSpacing: '.07em',
+                            fontWeight: 600, padding: '2px 7px', borderRadius: 6,
+                            background: o.orderType === 'recarga' ? `color-mix(in srgb,${AC} 16%,transparent)` : 'rgba(52,211,153,.12)',
+                            color: o.orderType === 'recarga' ? AC2 : '#34d399',
+                            border: `1px solid ${o.orderType === 'recarga' ? `color-mix(in srgb,${AC} 28%,transparent)` : 'rgba(52,211,153,.22)'}`,
+                          }}>
+                            {o.orderType === 'recarga' ? 'RECARGA' : 'NOVA PROXY'}
+                          </span>
+                        )}
+                      </div>
                       <div style={{ fontSize: 12, color: 'rgba(244,242,248,.45)', textTransform: 'capitalize' }}>{o.productType.replace('_', ' ')}</div>
                     </div>
                   </div>

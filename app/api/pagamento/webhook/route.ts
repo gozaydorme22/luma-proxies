@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
       quantity:       meta.gb,
       total_brl:      meta.total_brl,
       status:         'pago',
-      payment_method: 'pix',
+      payment_method: meta.is_recharge ? 'pix_recarga' : 'pix_nova',
       paid_at:        new Date().toISOString(),
       ...(meta.nonce ? { payment_nonce: meta.nonce } : {}),
     })
