@@ -477,7 +477,7 @@ export default function LandingPage() {
             {[
               { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>, title: '+180 Países', desc: 'Geo-targeting por país e por estado no Brasil. Escolha de onde seu IP parece ser.', badge: null },
               { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/></svg>, title: 'Rotação Automática', desc: 'IP troca a cada requisição ou em intervalos configuráveis. Anti-detecção máxima.', badge: 'EXCLUSIVO' },
-              { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>, title: 'GB Nunca Expira', desc: 'O saldo que você compra fica na conta para sempre. Use no seu ritmo, sem perder nada.', badge: null },
+              { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>, title: 'Ativação Imediata', desc: 'Confirmou o pagamento, proxy liberada na hora. Sem burocracia, sem espera.', badge: null },
               { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>, title: 'HTTP & SOCKS5', desc: 'Suporte completo a HTTP, HTTPS e SOCKS5. Compatível com qualquer software ou bot.', badge: null },
               { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>, title: 'IPs Residenciais Reais', desc: 'IPs de dispositivos reais — não datacenter. Passam por qualquer detecção de bot.', badge: null },
               { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6M21 19a2 2 0 0 1-2 2h-1v-7h3M3 19a2 2 0 0 0 2 2h1v-7H3"/></svg>, title: 'Suporte 24/7 em PT', desc: 'Time humano no WhatsApp e chat ao vivo. Resposta média em poucos minutos.', badge: null },
@@ -500,7 +500,7 @@ export default function LandingPage() {
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, letterSpacing: '.14em', color: AC2, textTransform: 'uppercase' }}>Planos · Residencial Rotativa</div>
               <h2 style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 600, fontSize: 40, lineHeight: 1.06, letterSpacing: '-.02em', margin: '14px 0 0' }}>Pague só pelo que <span style={{ color: AC }}>usar.</span></h2>
-              <p style={{ fontSize: 16.5, color: 'rgba(244,242,248,.55)', margin: '14px auto 0', maxWidth: 480 }}>Sem mensalidade. Seu GB nunca expira. Quanto mais GB, menor o preço.</p>
+              <p style={{ fontSize: 16.5, color: 'rgba(244,242,248,.55)', margin: '14px auto 0', maxWidth: 480 }}>Sem mensalidade. Quanto mais GB, menor o preço.</p>
             </div>
           </Reveal>
 
@@ -676,7 +676,6 @@ export default function LandingPage() {
           </Reveal>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 38 }}>
             {[
-              { q: 'O GB realmente nunca expira?', a: 'Sim. Diferente da maioria dos provedores, o saldo que você compra fica disponível na sua conta sem prazo de validade. Use no seu ritmo, sem perder nada.' },
               { q: 'O que é proxy residencial rotativa?', a: 'É um IP de um dispositivo residencial real (não datacenter) que troca automaticamente a cada requisição ou em intervalos configuráveis. Isso garante anonimato máximo e praticamente zero bloqueios.' },
               { q: 'Quais formas de pagamento vocês aceitam?', a: 'PIX (ativação instantânea), cartão de crédito e criptomoedas. O saldo é liberado automaticamente em segundos após a confirmação.' },
               { q: 'As proxies funcionam com AdsPower, Multilogin e bots?', a: 'Sim. Suportamos HTTP e SOCKS5, totalmente compatíveis com AdsPower, Multilogin, GoLogin, Dolphin, Selenium, Puppeteer e Playwright, sem vazamento de fingerprint.' },
@@ -707,7 +706,7 @@ export default function LandingPage() {
               <div style={{ position: 'absolute', inset: 0, backgroundImage: `linear-gradient(rgba(168,85,247,.04) 1px, transparent 1px), linear-gradient(90deg, rgba(168,85,247,.04) 1px, transparent 1px)`, backgroundSize: '48px 48px', pointerEvents: 'none' }} />
               <div style={{ position: 'relative' }}>
                 <h2 style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 600, fontSize: 44, lineHeight: 1.04, letterSpacing: '-.025em', margin: 0 }}>Comece a escalar<br />com a <span style={{ color: AC }}>Luma</span> hoje.</h2>
-                <p style={{ fontSize: 17, color: 'rgba(244,242,248,.6)', margin: '18px auto 0', maxWidth: 460 }}>Sem mensalidade, seus GB nunca expiram. Ativação imediata via PIX ou cripto.</p>
+                <p style={{ fontSize: 17, color: 'rgba(244,242,248,.6)', margin: '18px auto 0', maxWidth: 460 }}>Sem mensalidade. Ativação imediata via PIX ou cripto.</p>
                 <div style={{ display: 'flex', gap: 13, justifyContent: 'center', flexWrap: 'wrap', marginTop: 30 }}>
                   {user ? (
                     <button onClick={() => setCheckoutPlan('5')} className="btn-primary" style={{ fontSize: 16, padding: '16px 30px' }}>
@@ -737,7 +736,7 @@ export default function LandingPage() {
                   <svg width="26" height="26" viewBox="0 0 34 34" fill="none"><circle cx="17" cy="17" r="14.5" stroke={AC} strokeWidth="2" opacity=".35"/><path d="M17 2.5a14.5 14.5 0 0 1 0 29" stroke={AC2} strokeWidth="2.6" strokeLinecap="round"/><circle cx="17" cy="17" r="4.6" fill={AC}/></svg>
                   <span style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 600, fontSize: 17 }}>LUMA<span style={{ color: AC2 }}> PROXYS</span></span>
                 </div>
-                <p style={{ fontSize: 13.5, lineHeight: 1.6, color: 'rgba(244,242,248,.5)', margin: '14px 0 0', maxWidth: 280 }}>Proxys residenciais rotativas premium. Ativação imediata, seus GB nunca expiram.</p>
+                <p style={{ fontSize: 13.5, lineHeight: 1.6, color: 'rgba(244,242,248,.5)', margin: '14px 0 0', maxWidth: 280 }}>Proxys residenciais rotativas premium. Ativação imediata.</p>
               </div>
               {[
                 { title: 'Planos', links: ['3 GB — R$ 18,90', '5 GB — R$ 31,90', '10 GB — R$ 60,90', '20 GB — R$ 120,90'] },
