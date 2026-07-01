@@ -1,4 +1,4 @@
-import { createRemoteJWKSet, jwtVerify, JWTPayload, SignJWT, importPKCS8 } from 'jose'
+import { createRemoteJWKSet, jwtVerify, JWTPayload, SignJWT, importPKCS8, importX509, decodeProtectedHeader } from 'jose'
 
 const PROJECT_ID    = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? 'luma-proxies'
 const CLIENT_EMAIL  = process.env.FIREBASE_ADMIN_CLIENT_EMAIL ?? ''
@@ -99,4 +99,38 @@ async function updateUser(uid: string, updates: { emailVerified?: boolean; displ
   if (!res.ok) throw new Error(`updateUser HTTP ${res.status}`)
 }
 
-export const adminAuth = { verifyIdToken, getUserByEmail, deleteUser, updateUser }
+const SESSION_COOKIE_KEYS_URL = 'https://www.googleapis.com/identitytoolkit/v3/relyingparty/publicKeys'
+
+async function createSessionCookie(idToken: string, { expiresIn }: { expiresIn: number }): Promise<string> {
+  const accessToken = await getAccessToken()
+  const res = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/projects/${PROJECT_ID}:createSessionCookie`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken, validDuration: expiresIn }),
+    }
+  )
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`createSessionCookie HTTP ${res.status}: ${err}`)
+  }
+  const { sessionCookie } = await res.json() as { sessionCookie: string }
+  return sessionCookie
+}
+
+async function verifySessionCookie(cookie: string): Promise<DecodedIdToken> {
+  const header = decodeProtectedHeader(cookie)
+  const res = await fetch(SESSION_COOKIE_KEYS_URL)
+  const certs = await res.json() as Record<string, string>
+  const pem = header.kid ? certs[header.kid] : Object.values(certs)[0]
+  if (!pem) throw new Error('Session cookie signing key not found')
+  const key = await importX509(pem, 'RS256')
+  const { payload } = await jwtVerify(cookie, key, {
+    issuer:   `https://session.firebase.google.com/${PROJECT_ID}`,
+    audience: PROJECT_ID,
+  })
+  return { ...payload, uid: payload.sub as string }
+}
+
+export const adminAuth = { verifyIdToken, getUserByEmail, deleteUser, updateUser, createSessionCookie, verifySessionCookie }

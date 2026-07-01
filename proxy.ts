@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createRemoteJWKSet, jwtVerify } from 'jose'
-
-const FIREBASE_PROJECT_ID = 'luma-proxies'
-const JWKS = createRemoteJWKSet(
-  new URL('https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com')
-)
+import { adminAuth } from '@/lib/firebase/admin'
 
 const PUBLIC_PATHS = ['/', '/login', '/cadastro', '/verificar', '/api/webhook', '/api/auth', '/api/pagamento/webhook', '/api/cron', '/proxy-checker']
 const ADMIN_PREFIX = '/admin'
@@ -24,14 +19,11 @@ async function proxy(req: NextRequest) {
   if (!token) return redirectToLogin(req)
 
   try {
-    const { payload } = await jwtVerify(token, JWKS, {
-      issuer:   `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`,
-      audience: FIREBASE_PROJECT_ID,
-    })
+    const decoded = await adminAuth.verifySessionCookie(token)
 
-    const uid           = payload['sub'] as string
-    const role          = payload['role'] as string | undefined
-    const emailVerified = payload['email_verified'] as boolean | undefined
+    const uid           = decoded.uid
+    const role          = decoded['role'] as string | undefined
+    const emailVerified = decoded.email_verified
 
     // Bloqueia acesso ao dashboard/checkout se e-mail não verificado
     if (!emailVerified && (pathname.startsWith('/dashboard') || pathname.startsWith('/checkout'))) {

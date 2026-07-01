@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
   }
   if (!metaB64) return NextResponse.json({ error: 'Missing meta' }, { status: 400 })
 
-  interface Meta { uid: string; gb: number; plan_label: string; total_brl: number; coupon: string | null; discount_pct?: number }
+  interface Meta { uid: string; gb: number; plan_label: string; total_brl: number; coupon: string | null; discount_pct?: number; nonce?: string }
   let meta: Meta
   try {
     meta = JSON.parse(Buffer.from(metaB64, 'base64url').toString()) as Meta
@@ -51,18 +51,28 @@ export async function POST(req: NextRequest) {
 
   const supabase = createServerClient()
 
-  // Idempotency check
-  const { count: existingOrders } = await supabase
-    .from('orders')
-    .select('id', { count: 'exact', head: true })
-    .eq('client_id', meta.uid)
-    .eq('total_brl', meta.total_brl)
-    .eq('status', 'pago')
-    .gte('paid_at', new Date(Date.now() - 10 * 60 * 1000).toISOString())
-
-  if (existingOrders && existingOrders > 0) {
-    console.log('[webhook] duplicate — skipping uid:', meta.uid)
-    return NextResponse.json({ ok: true, duplicate: true })
+  // Idempotency check — nonce-based (new) with time-window fallback (legacy meta without nonce)
+  if (meta.nonce) {
+    const { count: nonceCount } = await supabase
+      .from('orders')
+      .select('id', { count: 'exact', head: true })
+      .eq('payment_nonce', meta.nonce)
+    if (nonceCount && nonceCount > 0) {
+      console.log('[webhook] duplicate nonce — skipping:', meta.nonce)
+      return NextResponse.json({ ok: true, duplicate: true })
+    }
+  } else {
+    const { count: existingOrders } = await supabase
+      .from('orders')
+      .select('id', { count: 'exact', head: true })
+      .eq('client_id', meta.uid)
+      .eq('total_brl', meta.total_brl)
+      .eq('status', 'pago')
+      .gte('paid_at', new Date(Date.now() - 10 * 60 * 1000).toISOString())
+    if (existingOrders && existingOrders > 0) {
+      console.log('[webhook] duplicate — skipping uid:', meta.uid)
+      return NextResponse.json({ ok: true, duplicate: true })
+    }
   }
 
   // Schedule all async work to run AFTER the response is sent
@@ -87,6 +97,7 @@ export async function POST(req: NextRequest) {
       status:         'pago',
       payment_method: 'pix',
       paid_at:        new Date().toISOString(),
+      ...(meta.nonce ? { payment_nonce: meta.nonce } : {}),
     })
     if (orderErr) console.error('[webhook] order insert:', orderErr.message)
 

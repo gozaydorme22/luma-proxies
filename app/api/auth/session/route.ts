@@ -13,12 +13,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
   }
 
+  const SEVEN_DAYS = 60 * 60 * 24 * 7
+  const sessionCookie = await adminAuth.createSessionCookie(token, { expiresIn: SEVEN_DAYS })
+
   const res = NextResponse.json({ ok: true })
-  res.cookies.set(COOKIE, token, {
+  res.cookies.set(COOKIE, sessionCookie, {
     httpOnly: true,
     secure:   process.env.NODE_ENV === 'production',
     sameSite: 'strict',
-    maxAge:   60 * 60 * 24 * 7, // 7 days — refreshed by AuthSync on token rotation
+    maxAge:   SEVEN_DAYS,
     path:     '/',
   })
   return res
