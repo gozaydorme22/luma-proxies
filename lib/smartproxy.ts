@@ -118,9 +118,10 @@ export function makeUsername(uid: string): string {
   return `luma${uid.replace(/[^a-z0-9]/gi, '').slice(0, 8).toLowerCase()}`
 }
 
-// Connection username used in proxy clients — appends country suffix for geo-targeting
-// countryCode defaults to 'br' (Brazil); pass null to get global rotation
-export function connectionUsername(baseUsername: string, countryCode: string | null = 'br'): string {
+// Connection username for proxy clients on proxy.smartproxy.net:3120.
+// This gateway authenticates with the base username only — the -country-XX suffix
+// is not supported on this endpoint and causes auth failures.
+export function connectionUsername(baseUsername: string, countryCode: string | null = null): string {
   const full = baseUsername.startsWith('smart-') ? baseUsername : `smart-${baseUsername}`
   return countryCode ? `${full}-country-${countryCode}` : full
 }

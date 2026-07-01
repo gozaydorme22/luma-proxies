@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
 
     if (smartproxyEnabled) {
       const baseUser = makeUsername(meta.uid)
-      proxyUser  = connectionUsername(baseUser)  // smart-xxx-country-br (for storage/email)
+      proxyUser  = connectionUsername(baseUser)  // smart-xxx (base username, no country suffix)
       proxyPass  = makePassword()
       proxyHost  = GATEWAY_HOST
       proxyPort  = GATEWAY_PORT
